@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "2.0",
   "targets": {
     "claude": "~/.claude/skills"
   },
@@ -23,46 +23,57 @@
   },
   "skills": {
     "skill-creator": {
+      "path": "~/.claude/skills/skill-creator",
       "repo": "anthropics-skills",
       "subdir": "skills/skill-creator",
       "pinned": false
     },
     "skill-vetter": {
+      "path": "~/.claude/skills/skill-vetter",
       "repo": "openclaw-skills",
       "subdir": "skills/spclaudehome/skill-vetter",
       "pinned": false
     },
     "find-skills": {
+      "path": "~/.claude/skills/find-skills",
       "repo": "vercel-labs-skills",
       "subdir": "skills/find-skills",
       "pinned": false
     },
     "openai-whisper": {
+      "path": "~/.claude/skills/openai-whisper",
       "repo": "openclaw-skills",
       "subdir": "skills/araa47/local-whisper",
       "pinned": false
     },
     "file-converter": {
+      "path": "~/.claude/skills/file-converter",
       "repo": null,
       "note": "本地 skill，无上游 repo（作者 Abble）"
     },
     "skills-manager": {
-      "repo": null,
-      "note": "Self-managed. Update via: cd ~/.agents/skills-manager && git pull"
+      "path": "~/.agents/skills-manager",
+      "type": "git-repo",
+      "repo_url": "git@github.com:heshaofu2/skills-manager.git",
+      "pinned": false
     },
     "ssh-aliyun": {
+      "path": "~/.claude/skills/ssh-aliyun",
       "repo": null,
-      "note": "Private: private:sensitive-file:hsf.pem"
+      "note": "Private: sensitive-file:hsf.pem"
     },
     "ssh-aliyun-us": {
+      "path": "~/.claude/skills/ssh-aliyun-us",
       "repo": null,
-      "note": "Private: private:ip:47.90.209.85"
+      "note": "Private: ip:47.90.209.85"
     },
     "ssh-racknerd": {
+      "path": "~/.claude/skills/ssh-racknerd",
       "repo": null,
-      "note": "Private: private:ip:120.26.7.208"
+      "note": "Private: ip:120.26.7.208"
     },
     "ai-shifu-course-creator": {
+      "path": "~/.claude/skills/ai-shifu-course-creator",
       "repo": "ai-shifu-skills",
       "subdir": "skills/ai-shifu-course-creator",
       "pinned": false
