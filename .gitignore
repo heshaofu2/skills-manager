@@ -3,3 +3,5 @@ repos/
 
 # Backup copies of skills
 skills-backup/
+.DS_Store
+todo.md
