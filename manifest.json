@@ -16,10 +16,6 @@
       "url": "https://github.com/openclaw/skills.git",
       "branch": "main"
     },
-    "skills-manager-repo": {
-      "url": "git@github.com:heshaofu2/skills-manager.git",
-      "branch": "main"
-    },
     "ai-shifu-skills": {
       "url": "git@github.com:ai-shifu/skills.git",
       "branch": "main"
@@ -51,9 +47,8 @@
       "note": "本地 skill，无上游 repo（作者 Abble）"
     },
     "skills-manager": {
-      "repo": "skills-manager-repo",
-      "subdir": ".",
-      "pinned": false
+      "repo": null,
+      "note": "Self-managed. Update via: cd ~/.agents/skills-manager && git pull"
     },
     "ssh-aliyun": {
       "repo": null,
