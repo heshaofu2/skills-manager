@@ -1,0 +1,5 @@
+# Upstream repo clones (managed by the script)
+repos/
+
+# Backup copies of skills
+skills-backup/

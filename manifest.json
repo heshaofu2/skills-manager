@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "repos": {
+    "anthropics-skills": {
+      "url": "https://github.com/anthropics/skills.git",
+      "branch": "main"
+    },
+    "vercel-labs-skills": {
+      "url": "https://github.com/vercel-labs/skills.git",
+      "branch": "main"
+    },
+    "openclaw-skills": {
+      "url": "https://github.com/openclaw/skills.git",
+      "branch": "main"
+    }
+  },
+  "skills": {
+    "skill-creator": {
+      "repo": "anthropics-skills",
+      "subdir": "skills/skill-creator",
+      "pinned": false
+    },
+    "skill-vetter": {
+      "repo": "openclaw-skills",
+      "subdir": "skills/spclaudehome/skill-vetter",
+      "pinned": false
+    },
+    "find-skills": {
+      "repo": "vercel-labs-skills",
+      "subdir": "skills/find-skills",
+      "pinned": false
+    },
+    "openai-whisper": {
+      "repo": "openclaw-skills",
+      "subdir": "skills/araa47/local-whisper",
+      "pinned": false
+    },
+    "file-converter": {
+      "repo": null,
+      "note": "本地 skill，无上游 repo（作者 Abble）"
+    }
+  }
+}
