@@ -97,6 +97,29 @@ manifest_update() {
   mv "$tmp" "$MANIFEST"
 }
 
+# Update sparse checkout for a repo to include only needed subdirs
+update_sparse_checkout() {
+  local repo="$1"
+  local repo_dir="$REPOS_DIR/$repo"
+  [ ! -d "$repo_dir/.git" ] && return
+
+  local subdirs=()
+  while IFS= read -r subdir; do
+    [ -n "$subdir" ] && subdirs+=("$subdir")
+  done < <(jq -r ".skills | to_entries[] | select(.value.repo == \"$repo\") | .value.subdir" "$MANIFEST" 2>/dev/null)
+
+  if [ ${#subdirs[@]} -gt 0 ]; then
+    (cd "$repo_dir" && git sparse-checkout set "${subdirs[@]}" 2>/dev/null) || true
+  fi
+}
+
+# Get current HEAD commit of a repo clone
+get_repo_head() {
+  local repo="$1"
+  local repo_dir="$REPOS_DIR/$repo"
+  [ -d "$repo_dir/.git" ] && (cd "$repo_dir" && git rev-parse HEAD 2>/dev/null) || echo ""
+}
+
 # Collect skill names from all target directories (deduped)
 collect_skills_from_targets() {
   local seen_str="|"
@@ -287,13 +310,21 @@ cmd_check() {
     if [ "$local_commit" != "$remote_commit" ]; then
       local behind
       behind=$(cd "$repo_dir" && git rev-list HEAD.."origin/$branch" --count)
-      echo -e "${YELLOW}$behind new commit(s) available${NC}"
-      local skills
-      skills=$(jq -r ".skills | to_entries[] | select(.value.repo == \"$repo\") | .key" "$MANIFEST")
-      for s in $skills; do
-        echo -e "    → $s"
-      done
-      has_updates=true
+      echo -e "${YELLOW}$behind new commit(s) in repo${NC}"
+
+      # Check each skill's subdir for actual changes
+      local skills_data
+      skills_data=$(jq -r ".skills | to_entries[] | select(.value.repo == \"$repo\") | \"\(.key)|\(.value.subdir)|\(.value.synced_commit // \"\")\"" "$MANIFEST")
+      while IFS='|' read -r sname subdir synced; do
+        [ -z "$sname" ] && continue
+        local base_commit="${synced:-$local_commit}"
+        if (cd "$repo_dir" && ! git diff --quiet "$base_commit" "origin/$branch" -- "$subdir/" 2>/dev/null); then
+          echo -e "    → ${YELLOW}$sname${NC} has changes"
+          has_updates=true
+        else
+          echo -e "    → ${GREEN}$sname${NC} unchanged"
+        fi
+      done <<< "$skills_data"
     else
       echo -e "${GREEN}up to date${NC}"
     fi
@@ -412,6 +443,10 @@ cmd_pull() {
       dest=$(expand_path "$spath")
       echo -ne "    Syncing $sname... "
       sync_skill "$repo" "$subdir" "$dest"
+      # Update synced_commit
+      local new_commit
+      new_commit=$(get_repo_head "$repo")
+      manifest_update ".skills[\"$sname\"].synced_commit = \"$new_commit\""
       echo -e "${GREEN}done${NC}"
     done <<< "$skills"
   done
@@ -462,8 +497,8 @@ cmd_add_repo() {
 
   manifest_update ".repos[\"$name\"] = {\"url\": \"$url\", \"branch\": \"$branch\"}"
 
-  echo -e "Cloning $name from $url..."
-  git clone "$url" "$REPOS_DIR/$name"
+  echo -e "Cloning $name from $url (sparse)..."
+  git clone --filter=blob:none --sparse --branch "$branch" "$url" "$REPOS_DIR/$name" 2>&1
   echo -e "${GREEN}Done.${NC} Now use 'add-skill' to register skills from this repo."
 }
 
@@ -478,12 +513,6 @@ cmd_add_skill() {
 
   if ! jq -e ".repos[\"$repo\"]" "$MANIFEST" &>/dev/null; then
     echo -e "${RED}Error: repo '$repo' not found. Add it first with add-repo.${NC}"
-    exit 1
-  fi
-
-  local source_dir="$REPOS_DIR/$repo/$subdir"
-  if [ ! -d "$source_dir" ]; then
-    echo -e "${RED}Error: directory '$subdir' not found in repo '$repo'${NC}"
     exit 1
   fi
 
@@ -514,12 +543,27 @@ cmd_add_skill() {
     echo -e "  Installing to: $skill_path"
   fi
 
+  # Update sparse checkout to include this subdir
+  update_sparse_checkout "$repo"
+  # Also ensure the new subdir is checked out (in case manifest wasn't saved yet)
+  (cd "$REPOS_DIR/$repo" && git sparse-checkout add "$subdir" 2>/dev/null) || true
+
+  local source_dir_check="$REPOS_DIR/$repo/$subdir"
+  if [ ! -d "$source_dir_check" ]; then
+    echo -e "${RED}Error: directory '$subdir' not found in repo '$repo' after sparse checkout${NC}"
+    exit 1
+  fi
+
   # Sync content
   sync_skill "$repo" "$subdir" "$skill_path"
 
+  # Record synced commit
+  local synced_commit
+  synced_commit=$(get_repo_head "$repo")
+
   # Convert to ~ path for manifest
   local manifest_path="${skill_path/#$HOME/\~}"
-  manifest_update ".skills[\"$name\"] = {\"path\": \"$manifest_path\", \"repo\": \"$repo\", \"subdir\": \"$subdir\", \"pinned\": false}"
+  manifest_update ".skills[\"$name\"] = {\"path\": \"$manifest_path\", \"repo\": \"$repo\", \"subdir\": \"$subdir\", \"synced_commit\": \"$synced_commit\", \"pinned\": false}"
 
   echo -e "${GREEN}Skill '$name' registered at $skill_path${NC}"
 }
@@ -603,10 +647,16 @@ cmd_remove() {
     exit 1
   fi
 
-  local path
+  local path repo
   path=$(get_skill_path "$name")
+  repo=$(jq -r ".skills[\"$name\"].repo // \"null\"" "$MANIFEST")
 
   manifest_update "del(.skills[\"$name\"])"
+
+  # Shrink sparse checkout if this was a repo-synced skill
+  if [ "$repo" != "null" ] && [ -n "$repo" ]; then
+    update_sparse_checkout "$repo"
+  fi
 
   echo -e "${GREEN}Skill '$name' removed from manifest.${NC}"
   if [ -n "$path" ]; then

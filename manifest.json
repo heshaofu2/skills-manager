@@ -1,5 +1,5 @@
 {
-  "version": "2.0",
+  "version": "1.0",
   "targets": {
     "claude": "~/.claude/skills"
   },
@@ -26,24 +26,28 @@
       "path": "~/.claude/skills/skill-creator",
       "repo": "anthropics-skills",
       "subdir": "skills/skill-creator",
+      "synced_commit": "b0cbd3df1533b396d281a6886d5132f623393a9c",
       "pinned": false
     },
     "skill-vetter": {
       "path": "~/.claude/skills/skill-vetter",
       "repo": "openclaw-skills",
       "subdir": "skills/spclaudehome/skill-vetter",
+      "synced_commit": "1a46a373921d7fdd7c738c6386d939732fa6f498",
       "pinned": false
     },
     "find-skills": {
       "path": "~/.claude/skills/find-skills",
       "repo": "vercel-labs-skills",
       "subdir": "skills/find-skills",
+      "synced_commit": "fc3b8b8d68bd640028d2ceedaa5fe2fdf129d05a",
       "pinned": false
     },
     "openai-whisper": {
       "path": "~/.claude/skills/openai-whisper",
       "repo": "openclaw-skills",
       "subdir": "skills/araa47/local-whisper",
+      "synced_commit": "1a46a373921d7fdd7c738c6386d939732fa6f498",
       "pinned": false
     },
     "file-converter": {
@@ -76,6 +80,7 @@
       "path": "~/.claude/skills/ai-shifu-course-creator",
       "repo": "ai-shifu-skills",
       "subdir": "skills/ai-shifu-course-creator",
+      "synced_commit": "24c42318e86fe339cca35d97bac322a99e9306a1",
       "pinned": false
     }
   }

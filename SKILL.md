@@ -18,17 +18,19 @@ Skills stay where they are. We only record their paths and track upstream source
 ├── manifest.json          # Registry: skills with paths, repos, targets
 ├── update-skills.sh       # CLI script for all operations
 ├── SKILL.md               # This file
-└── repos/                 # Git clones of upstream repos (reference only)
-    ├── anthropics-skills/
+└── repos/                 # Sparse git clones of upstream repos (reference only)
+    ├── anthropics-skills/  # Only checked-out subdirs for registered skills
     ├── vercel-labs-skills/
     └── ...
 ```
+
+**Sparse checkout**: Each repo clone only contains the subdirectories of registered skills. Adding or removing a skill automatically updates the sparse checkout scope, minimizing disk usage and bandwidth.
 
 ### Three skill types
 
 | Type | Storage | Update method |
 |------|---------|---------------|
-| **repo-synced** | Plain directory (e.g. `~/.claude/skills/pdf/`) | `rsync` from `repos/` clone |
+| **repo-synced** | Plain directory (e.g. `~/.claude/skills/pdf/`) | `rsync` from `repos/` sparse clone; tracks `synced_commit` per skill |
 | **git-repo** | The skill dir IS a git repo | `git pull` in-place |
 | **local** | `repo: null`, user-managed | Not updated |
 
@@ -60,7 +62,7 @@ Show all registered skills with their types, paths, and commit hashes.
 
 ### Check for updates
 
-Fetch from upstream repos and report which have new commits. Also checks git-repo type skills.
+Fetch from upstream repos and use **subdir-level diff** to detect real changes per skill (not just repo-level commits). Also checks git-repo type skills.
 
 ```bash
 ~/.agents/skills-manager/update-skills.sh check
@@ -141,6 +143,7 @@ Remove from manifest only. Files at the skill's path are NOT deleted.
       "path": "~/.claude/skills/skill-creator",
       "repo": "anthropics-skills",
       "subdir": "skills/skill-creator",
+      "synced_commit": "b0cbd3d...",
       "pinned": false
     },
     "skills-manager": {
