@@ -38,6 +38,27 @@ expand_path() {
   echo "${1/#\~/$HOME}"
 }
 
+# Convert repo key (e.g. "anthropics/skills") to directory name (e.g. "anthropics-skills")
+repo_to_dir() {
+  echo "${1//\//-}"
+}
+
+# Convert directory name back to repo key by looking up manifest
+dir_to_repo() {
+  local dirname="$1"
+  # Find the repo key whose repo_to_dir matches this dirname
+  local key
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    if [ "$(repo_to_dir "$key")" = "$dirname" ]; then
+      echo "$key"
+      return
+    fi
+  done < <(jq -r '.repos | keys[]' "$MANIFEST" 2>/dev/null)
+  # Fallback: return dirname as-is
+  echo "$dirname"
+}
+
 # Read target directories from manifest. Each line: "name|expanded_path"
 get_targets() {
   local raw
@@ -79,7 +100,7 @@ get_skill_type() {
 # Sync content from repos/ to a skill's path
 sync_skill() {
   local repo="$1" subdir="$2" dest_path="$3"
-  local source="$REPOS_DIR/$repo/$subdir/"
+  local source="$REPOS_DIR/$(repo_to_dir "$repo")/$subdir/"
   if [ ! -d "$source" ]; then
     echo -e "  ${RED}Error: source $repo/$subdir not found in repos${NC}"
     return 1
@@ -100,7 +121,7 @@ manifest_update() {
 # Update sparse checkout for a repo to include only needed subdirs
 update_sparse_checkout() {
   local repo="$1"
-  local repo_dir="$REPOS_DIR/$repo"
+  local repo_dir="$REPOS_DIR/$(repo_to_dir "$repo")"
   [ ! -d "$repo_dir/.git" ] && return
 
   local subdirs=()
@@ -116,7 +137,7 @@ update_sparse_checkout() {
 # Get current HEAD commit of a repo clone
 get_repo_head() {
   local repo="$1"
-  local repo_dir="$REPOS_DIR/$repo"
+  local repo_dir="$REPOS_DIR/$(repo_to_dir "$repo")"
   [ -d "$repo_dir/.git" ] && (cd "$repo_dir" && git rev-parse HEAD 2>/dev/null) || echo ""
 }
 
@@ -255,8 +276,8 @@ cmd_list() {
           ;;
         repo-synced)
           local commit=""
-          if [ -d "$REPOS_DIR/$repo/.git" ]; then
-            commit=$(cd "$REPOS_DIR/$repo" && git rev-parse --short HEAD 2>/dev/null || echo "???")
+          if [ -d "$REPOS_DIR/$(repo_to_dir "$repo")/.git" ]; then
+            commit=$(cd "$REPOS_DIR/$(repo_to_dir "$repo")" && git rev-parse --short HEAD 2>/dev/null || echo "???")
           fi
           echo -e "  ${GREEN}$skill${NC} → $repo/$subdir [$commit] $path$path_status$pin_marker"
           ;;
@@ -293,7 +314,7 @@ cmd_check() {
     local url branch repo_dir
     url=$(jq -r ".repos[\"$repo\"].url" "$MANIFEST")
     branch=$(jq -r ".repos[\"$repo\"].branch // \"main\"" "$MANIFEST")
-    repo_dir="$REPOS_DIR/$repo"
+    repo_dir="$REPOS_DIR/$(repo_to_dir "$repo")"
 
     if [ ! -d "$repo_dir/.git" ]; then
       echo -e "  ${RED}$repo${NC}: not cloned yet"
@@ -412,7 +433,7 @@ cmd_pull() {
     local url branch repo_dir
     url=$(jq -r ".repos[\"$repo\"].url" "$MANIFEST")
     branch=$(jq -r ".repos[\"$repo\"].branch // \"main\"" "$MANIFEST")
-    repo_dir="$REPOS_DIR/$repo"
+    repo_dir="$REPOS_DIR/$(repo_to_dir "$repo")"
 
     if [ ! -d "$repo_dir/.git" ]; then
       echo -e "  Cloning $repo from $url..."
@@ -498,7 +519,7 @@ cmd_add_repo() {
   manifest_update ".repos[\"$name\"] = {\"url\": \"$url\", \"branch\": \"$branch\"}"
 
   echo -e "Cloning $name from $url (sparse)..."
-  git clone --filter=blob:none --sparse --branch "$branch" "$url" "$REPOS_DIR/$name" 2>&1
+  git clone --filter=blob:none --sparse --branch "$branch" "$url" "$REPOS_DIR/$(repo_to_dir "$name")" 2>&1
   echo -e "${GREEN}Done.${NC} Now use 'add-skill' to register skills from this repo."
 }
 
@@ -546,9 +567,9 @@ cmd_add_skill() {
   # Update sparse checkout to include this subdir
   update_sparse_checkout "$repo"
   # Also ensure the new subdir is checked out (in case manifest wasn't saved yet)
-  (cd "$REPOS_DIR/$repo" && git sparse-checkout add "$subdir" 2>/dev/null) || true
+  (cd "$REPOS_DIR/$(repo_to_dir "$repo")" && git sparse-checkout add "$subdir" 2>/dev/null) || true
 
-  local source_dir_check="$REPOS_DIR/$repo/$subdir"
+  local source_dir_check="$REPOS_DIR/$(repo_to_dir "$repo")/$subdir"
   if [ ! -d "$source_dir_check" ]; then
     echo -e "${RED}Error: directory '$subdir' not found in repo '$repo' after sparse checkout${NC}"
     exit 1
@@ -727,7 +748,7 @@ cmd_scan() {
       for repo_dir in "$REPOS_DIR"/*/; do
         [ ! -d "$repo_dir" ] && continue
         local rname
-        rname=$(basename "$repo_dir")
+        rname=$(dir_to_repo "$(basename "$repo_dir")")
         if [ -f "$repo_dir/skills/$name/SKILL.md" ]; then
           matched_repo="$rname"
           matched_subdir="skills/$name"
@@ -771,7 +792,7 @@ cmd_scan() {
   for repo_dir in "$REPOS_DIR"/*/; do
     [ ! -d "$repo_dir" ] && continue
     local rname
-    rname=$(basename "$repo_dir")
+    rname=$(dir_to_repo "$(basename "$repo_dir")")
     [ ! -d "$repo_dir/skills" ] && continue
 
     for skill_md in "$repo_dir"/skills/*/SKILL.md; do
@@ -1030,7 +1051,7 @@ EOF
           for repo_dir in "$REPOS_DIR"/*/; do
             [ ! -d "$repo_dir" ] && continue
             local rname
-            rname=$(basename "$repo_dir")
+            rname=$(dir_to_repo "$(basename "$repo_dir")")
             if [ -f "$repo_dir/skills/$name/SKILL.md" ]; then
               echo -ne "  ${GREEN}$name${NC} → found in $rname — register as repo-synced? [Y/n] "
               read -r answer

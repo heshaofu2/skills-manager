@@ -1,29 +1,38 @@
 # Skills Manager
 
-A CLI tool for managing [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills installed from GitHub repositories. Track upstream changes, pull updates, and add or remove skills — all through a single script backed by a manifest registry.
+A CLI tool for managing [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and other AI agent skills installed from GitHub repositories. Track upstream changes, pull updates, and add or remove skills — all through a single script backed by a manifest registry.
 
-## Architecture
+> 中文版请查看 [README_CN.md](README_CN.md)
+
+## Architecture (v2 — path-based)
+
+Skills stay where they are. We only record their paths and track upstream sources. No file moving, no directory replacement.
 
 ```
-~/.agents/
-├── skills-manager/
-│   ├── manifest.json          # Registry: maps skills → repo sources
-│   ├── update-skills.sh       # CLI script for all operations
-│   └── repos/                 # Git clones of upstream repos
-│       ├── anthropics-skills/
-│       ├── vercel-labs-skills/
-│       └── ...
-└── skills/                    # Symlinks into repos/ subdirectories
-    ├── skill-creator -> ../skills-manager/repos/anthropics-skills/skills/skill-creator
+~/.agents/skills-manager/
+├── manifest.json          # Registry: skills with paths, repos, targets
+├── update-skills.sh       # CLI script for all operations
+├── SKILL.md               # Claude Code skill definition
+└── repos/                 # Sparse git clones of upstream repos (reference only)
+    ├── anthropics-skills/  # Only checked-out subdirs for registered skills
+    ├── vercel-labs-skills/
     └── ...
-
-~/.claude/skills/              # Claude Code reads skills from here
-├── skills-manager -> ../../.agents/skills/skills-manager
-├── skill-creator  -> ../../.agents/skills/skill-creator
-└── ...
 ```
 
-Skills are connected through a two-level symlink chain. When a repo is updated via `git pull`, skill content updates automatically — no manual copying needed.
+### Three Skill Types
+
+| Type | Storage | Update Method |
+|------|---------|---------------|
+| **repo-synced** | Plain directory synced from a repo subdirectory | `rsync` from sparse `repos/` clone; tracks `synced_commit` per skill |
+| **git-repo** | The skill directory itself is a git repo | `git pull` in-place |
+| **local** | `repo: null`, user-managed | Not updated (private/infrastructure) |
+
+### Key Design Decisions
+
+- **Sparse checkout**: Each repo clone only contains subdirectories of registered skills, minimizing disk usage and bandwidth
+- **Subdir-level diff**: `check` compares changes at the skill's subdirectory level, not repo level — avoids false positives when unrelated files in the repo change
+- **synced_commit tracking**: Each repo-synced skill records the repo commit hash at last sync, enabling precise change detection
+- **Multi-platform targets**: Supports multiple agent platforms (Claude Code, OpenClaw, etc.) via configurable target directories
 
 ## Installation
 
@@ -34,15 +43,22 @@ git clone git@github.com:heshaofu2/skills-manager.git ~/.agents/skills-manager
 # 2. Make the script executable
 chmod +x ~/.agents/skills-manager/update-skills.sh
 
-# 3. Create required directories
-mkdir -p ~/.agents/skills ~/.claude/skills
+# 3. Link skills-manager as a Claude Code skill
+ln -sfn ~/.agents/skills-manager ~/.claude/skills/skills-manager
 
-# 4. Link skills-manager itself as a Claude Code skill
-ln -sfn ../skills-manager ~/.agents/skills/skills-manager
-ln -sfn ../../.agents/skills/skills-manager ~/.claude/skills/skills-manager
+# 4. Run init to scan and register existing skills
+~/.agents/skills-manager/update-skills.sh init
 ```
 
 ## Usage
+
+### Initialize (first-time setup)
+
+Scans existing skills across all target directories, classifies them using heuristics (private, external repo, unknown), and registers them in the manifest with their actual paths. No files are moved.
+
+```bash
+~/.agents/skills-manager/update-skills.sh init
+```
 
 ### List all skills
 
@@ -52,7 +68,7 @@ ln -sfn ../../.agents/skills/skills-manager ~/.claude/skills/skills-manager
 
 ### Check for updates
 
-Fetches from all upstream repos and reports which ones have new commits. Does **not** pull changes.
+Fetches from upstream repos and uses subdir-level diff to detect real changes per skill. Also checks git-repo type skills.
 
 ```bash
 ~/.agents/skills-manager/update-skills.sh check
@@ -61,11 +77,11 @@ Fetches from all upstream repos and reports which ones have new commits. Does **
 ### Pull updates
 
 ```bash
-# Pull all repos
+# Pull all
 ~/.agents/skills-manager/update-skills.sh pull
 
-# Pull a specific repo
-~/.agents/skills-manager/update-skills.sh pull <repo-name>
+# Pull a specific repo or skill
+~/.agents/skills-manager/update-skills.sh pull <repo-or-skill-name>
 ```
 
 ### Add a new skill from GitHub
@@ -76,7 +92,7 @@ Fetches from all upstream repos and reports which ones have new commits. Does **
 ~/.agents/skills-manager/update-skills.sh add-repo <local-name> <github-url> [branch]
 ```
 
-**Step 2** — Register the skill:
+**Step 2** — Install the skill (syncs content to target directory, records path):
 
 ```bash
 ~/.agents/skills-manager/update-skills.sh add-skill <skill-name> <repo-name> <subdir-in-repo>
@@ -85,151 +101,86 @@ Fetches from all upstream repos and reports which ones have new commits. Does **
 Example:
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-repo my-skills https://github.com/user/skills.git main
-~/.agents/skills-manager/update-skills.sh add-skill my-tool my-skills skills/my-tool
+~/.agents/skills-manager/update-skills.sh add-repo anthropics-skills https://github.com/anthropics/skills.git main
+~/.agents/skills-manager/update-skills.sh add-skill pdf anthropics-skills skills/pdf
+```
+
+### Register a git-repo skill
+
+For skills that are themselves git repositories:
+
+```bash
+~/.agents/skills-manager/update-skills.sh add-git <name> <path> [repo-url]
+```
+
+### Register a local skill
+
+For private/infrastructure skills with no upstream:
+
+```bash
+~/.agents/skills-manager/update-skills.sh add-local <name> [note]
+```
+
+### Scan and recommend
+
+Scan target directories for unmanaged skills and provide recommendations:
+
+```bash
+~/.agents/skills-manager/update-skills.sh scan
 ```
 
 ### Remove a skill
+
+Removes from manifest only. Files at the skill's path are NOT deleted.
 
 ```bash
 ~/.agents/skills-manager/update-skills.sh remove <skill-name>
 ```
 
-The repo clone is kept since it may be shared by other skills.
+### Manage target platforms
+
+```bash
+~/.agents/skills-manager/update-skills.sh add-target <name> <path>
+~/.agents/skills-manager/update-skills.sh remove-target <name>
+```
 
 ## Manifest Format
 
-`manifest.json` tracks two things:
-
-- **repos** — Each upstream GitHub repo with its URL and branch
-- **skills** — Each skill mapped to a repo name and subdirectory, with an optional `pinned` flag to skip updates
-
-Skills with `"repo": null` are local-only and not tracked for updates.
+```json
+{
+  "version": "2.0",
+  "targets": { "claude": "~/.claude/skills" },
+  "repos": {
+    "anthropics-skills": { "url": "https://github.com/anthropics/skills.git", "branch": "main" }
+  },
+  "skills": {
+    "skill-creator": {
+      "path": "~/.claude/skills/skill-creator",
+      "repo": "anthropics-skills",
+      "subdir": "skills/skill-creator",
+      "synced_commit": "b0cbd3d...",
+      "pinned": false
+    },
+    "skills-manager": {
+      "path": "~/.agents/skills-manager",
+      "type": "git-repo",
+      "repo_url": "git@github.com:user/skills-manager.git"
+    },
+    "ssh-server": {
+      "path": "~/.claude/skills/ssh-server",
+      "repo": null,
+      "note": "Private infrastructure skill"
+    }
+  }
+}
+```
 
 ## Requirements
 
 - `git`
 - `jq`
+- `rsync`
 
 ## License
-
-MIT
-
----
-
-# Skills Manager（中文版）
-
-一个用于管理从 GitHub 仓库安装的 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) Skills 的命令行工具。支持追踪上游变更、拉取更新、添加和移除 Skills，所有操作通过一个脚本 + manifest 注册表完成。
-
-## 架构
-
-```
-~/.agents/
-├── skills-manager/
-│   ├── manifest.json          # 注册表：将 skill 映射到 repo 来源
-│   ├── update-skills.sh       # CLI 脚本（所有操作入口）
-│   └── repos/                 # 上游 repo 的 Git 克隆
-│       ├── anthropics-skills/
-│       ├── vercel-labs-skills/
-│       └── ...
-└── skills/                    # 指向 repos/ 子目录的符号链接
-    ├── skill-creator -> ../skills-manager/repos/anthropics-skills/skills/skill-creator
-    └── ...
-
-~/.claude/skills/              # Claude Code 从这里读取 skills
-├── skills-manager -> ../../.agents/skills/skills-manager
-├── skill-creator  -> ../../.agents/skills/skill-creator
-└── ...
-```
-
-Skills 通过两级符号链接连接。当通过 `git pull` 更新 repo 时，skill 内容自动更新，无需手动复制。
-
-## 安装
-
-```bash
-# 1. 克隆本仓库
-git clone git@github.com:heshaofu2/skills-manager.git ~/.agents/skills-manager
-
-# 2. 赋予脚本执行权限
-chmod +x ~/.agents/skills-manager/update-skills.sh
-
-# 3. 创建所需目录
-mkdir -p ~/.agents/skills ~/.claude/skills
-
-# 4. 将 skills-manager 自身链接为 Claude Code skill
-ln -sfn ../skills-manager ~/.agents/skills/skills-manager
-ln -sfn ../../.agents/skills/skills-manager ~/.claude/skills/skills-manager
-```
-
-## 使用方法
-
-### 列出所有 Skills
-
-```bash
-~/.agents/skills-manager/update-skills.sh list
-```
-
-### 检查更新
-
-从所有上游 repo 获取信息，报告哪些有新提交。**不会**拉取变更。
-
-```bash
-~/.agents/skills-manager/update-skills.sh check
-```
-
-### 拉取更新
-
-```bash
-# 拉取所有 repo
-~/.agents/skills-manager/update-skills.sh pull
-
-# 拉取指定 repo
-~/.agents/skills-manager/update-skills.sh pull <repo-name>
-```
-
-### 从 GitHub 添加新 Skill
-
-**第一步** — 注册 repo（如已注册则跳过）：
-
-```bash
-~/.agents/skills-manager/update-skills.sh add-repo <本地名称> <github-url> [branch]
-```
-
-**第二步** — 注册 skill：
-
-```bash
-~/.agents/skills-manager/update-skills.sh add-skill <skill名称> <repo名称> <repo中的子目录>
-```
-
-示例：
-
-```bash
-~/.agents/skills-manager/update-skills.sh add-repo my-skills https://github.com/user/skills.git main
-~/.agents/skills-manager/update-skills.sh add-skill my-tool my-skills skills/my-tool
-```
-
-### 移除 Skill
-
-```bash
-~/.agents/skills-manager/update-skills.sh remove <skill名称>
-```
-
-repo 克隆会保留，因为可能有其他 skill 依赖它。
-
-## Manifest 格式
-
-`manifest.json` 追踪两类信息：
-
-- **repos** — 每个上游 GitHub repo 的 URL 和分支
-- **skills** — 每个 skill 映射到 repo 名称和子目录，可选 `pinned` 标记跳过更新
-
-`"repo": null` 表示本地 skill，不追踪上游更新。
-
-## 依赖
-
-- `git`
-- `jq`
-
-## 许可
 
 MIT
