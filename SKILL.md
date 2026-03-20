@@ -7,7 +7,7 @@ argument-hint: "[init|list|check|pull|scan|add|remove]"
 
 # Skills Manager
 
-Manage agent skills installed from GitHub repositories, with multi-platform support. Track upstream changes, pull updates, and add or remove skills — all through a single CLI script backed by a manifest registry.
+Manage agent skills installed from GitHub repositories, with multi-platform support. Track upstream changes, pull updates, and add or remove skills — all through a Python CLI backed by a manifest registry.
 
 ## Architecture (v2 — path-based)
 
@@ -16,12 +16,16 @@ Skills stay where they are. We only record their paths and track upstream source
 ```
 ~/.agents/skills-manager/
 ├── manifest.json          # Registry: skills with paths, repos, targets
-├── update-skills.sh       # CLI script for all operations
 ├── SKILL.md               # This file
-└── repos/                 # Sparse git clones of upstream repos (reference only)
-    ├── anthropics-skills/  # Only checked-out subdirs for registered skills
-    ├── vercel-labs-skills/
-    └── ...
+├── scripts/               # Python CLI
+│   ├── main.py            # Entry point
+│   ├── manifest.py        # Manifest read/write/query
+│   ├── git_ops.py         # Git subprocess wrappers
+│   ├── sync.py            # File synchronization
+│   ├── scanner.py         # Skill discovery & classification
+│   ├── output.py          # ANSI color output
+│   └── commands/          # One file per command group
+└── repos/                 # Sparse git clones of upstream repos
 ```
 
 **Sparse checkout**: Each repo clone only contains the subdirectories of registered skills. Adding or removing a skill automatically updates the sparse checkout scope, minimizing disk usage and bandwidth.
@@ -30,14 +34,14 @@ Skills stay where they are. We only record their paths and track upstream source
 
 | Type | Storage | Update method |
 |------|---------|---------------|
-| **repo-synced** | Plain directory (e.g. `~/.claude/skills/pdf/`) | `rsync` from `repos/` sparse clone; tracks `synced_commit` per skill |
+| **repo-synced** | Plain directory (e.g. `~/.claude/skills/pdf/`) | Synced from `repos/` sparse clone; tracks `synced_commit` per skill |
 | **git-repo** | The skill dir IS a git repo | `git pull` in-place |
 | **local** | `repo: null`, user-managed | Not updated |
 
 ## Script Location
 
 ```
-~/.agents/skills-manager/update-skills.sh
+python3 ~/.agents/skills-manager/scripts/main.py
 ```
 
 ## Available Commands
@@ -49,7 +53,7 @@ When the user invokes this skill, run the appropriate subcommand based on `$ARGU
 Scan existing skills across all target directories, classify them using heuristics, and register them in the manifest with their actual paths. No files are moved.
 
 ```bash
-~/.agents/skills-manager/update-skills.sh init
+python3 ~/.agents/skills-manager/scripts/main.py init
 ```
 
 ### List all skills
@@ -57,7 +61,7 @@ Scan existing skills across all target directories, classify them using heuristi
 Show all registered skills with their types, paths, and commit hashes.
 
 ```bash
-~/.agents/skills-manager/update-skills.sh list
+python3 ~/.agents/skills-manager/scripts/main.py list
 ```
 
 ### Check for updates
@@ -65,17 +69,17 @@ Show all registered skills with their types, paths, and commit hashes.
 Fetch from upstream repos and use **subdir-level diff** to detect real changes per skill (not just repo-level commits). Also checks git-repo type skills.
 
 ```bash
-~/.agents/skills-manager/update-skills.sh check
+python3 ~/.agents/skills-manager/scripts/main.py check
 ```
 
 ### Pull updates
 
-Pull latest changes and sync to skill paths. For repo-synced skills, pulls the repo then rsyncs to each skill's path. For git-repo skills, runs `git pull` in-place.
+Pull latest changes and sync to skill paths. For repo-synced skills, pulls the repo then syncs to each skill's path. For git-repo skills, runs `git pull` in-place.
 
 ```bash
-~/.agents/skills-manager/update-skills.sh pull              # all
-~/.agents/skills-manager/update-skills.sh pull <repo-name>   # specific repo
-~/.agents/skills-manager/update-skills.sh pull <skill-name>  # specific skill
+python3 ~/.agents/skills-manager/scripts/main.py pull              # all
+python3 ~/.agents/skills-manager/scripts/main.py pull <repo-name>   # specific repo
+python3 ~/.agents/skills-manager/scripts/main.py pull <skill-name>  # specific skill
 ```
 
 ### Scan and recommend
@@ -83,7 +87,7 @@ Pull latest changes and sync to skill paths. For repo-synced skills, pulls the r
 Scan target directories for unmanaged skills. Uses heuristics to classify each one.
 
 ```bash
-~/.agents/skills-manager/update-skills.sh scan
+python3 ~/.agents/skills-manager/scripts/main.py scan
 ```
 
 ### Add a new skill from GitHub
@@ -91,13 +95,13 @@ Scan target directories for unmanaged skills. Uses heuristics to classify each o
 **Step 1: Register the repo** (skip if already registered)
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-repo <name> <url> [branch]
+python3 ~/.agents/skills-manager/scripts/main.py add-repo <name> <url> [branch]
 ```
 
 **Step 2: Install the skill** — syncs content to target directory and records path
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-skill <name> <repo> <subdir>
+python3 ~/.agents/skills-manager/scripts/main.py add-skill <name> <repo> <subdir>
 ```
 
 ### Register a git-repo skill
@@ -105,7 +109,7 @@ Scan target directories for unmanaged skills. Uses heuristics to classify each o
 For skills that are themselves git repositories (updated via `git pull`):
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-git <name> <path> [repo-url]
+python3 ~/.agents/skills-manager/scripts/main.py add-git <name> <path> [repo-url]
 ```
 
 ### Register a local skill
@@ -113,7 +117,7 @@ For skills that are themselves git repositories (updated via `git pull`):
 For skills with no upstream repo (private/infrastructure):
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-local <name> [note]
+python3 ~/.agents/skills-manager/scripts/main.py add-local <name> [note]
 ```
 
 ### Remove a skill
@@ -121,49 +125,19 @@ For skills with no upstream repo (private/infrastructure):
 Remove from manifest only. Files at the skill's path are NOT deleted.
 
 ```bash
-~/.agents/skills-manager/update-skills.sh remove <name>
+python3 ~/.agents/skills-manager/scripts/main.py remove <name>
 ```
 
 ### Manage target platforms
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-target <name> <path>
-~/.agents/skills-manager/update-skills.sh remove-target <name>
-```
-
-## Manifest Format
-
-```json
-{
-  "version": "2.0",
-  "targets": { "claude": "~/.claude/skills" },
-  "repos": { "anthropics-skills": { "url": "https://...", "branch": "main" } },
-  "skills": {
-    "skill-creator": {
-      "path": "~/.claude/skills/skill-creator",
-      "repo": "anthropics-skills",
-      "subdir": "skills/skill-creator",
-      "synced_commit": "b0cbd3d...",
-      "pinned": false
-    },
-    "skills-manager": {
-      "path": "~/.agents/skills-manager",
-      "type": "git-repo",
-      "repo_url": "git@github.com:user/skills-manager.git",
-      "pinned": false
-    },
-    "ssh-racknerd": {
-      "path": "~/.claude/skills/ssh-racknerd",
-      "repo": null,
-      "note": "Private infrastructure skill"
-    }
-  }
-}
+python3 ~/.agents/skills-manager/scripts/main.py add-target <name> <path>
+python3 ~/.agents/skills-manager/scripts/main.py remove-target <name>
 ```
 
 ## Agent Intelligence Layer
 
-The shell script handles mechanical operations. As an AI agent, you add intelligence:
+The Python scripts handle mechanical operations. As an AI agent, you add intelligence:
 
 ### Origin Discovery for Unknown Skills
 

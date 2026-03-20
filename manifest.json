@@ -19,6 +19,10 @@
     "ai-shifu/skills": {
       "url": "git@github.com:ai-shifu/skills.git",
       "branch": "main"
+    },
+    "ai-shifu-course-creator": {
+      "url": "https://clawhub.ai/heshaofu2/ai-shifu-course-creator",
+      "branch": "main"
     }
   },
   "skills": {
@@ -78,10 +82,8 @@
     },
     "ai-shifu-course-creator": {
       "path": "~/.claude/skills/ai-shifu-course-creator",
-      "repo": "ai-shifu/skills",
-      "subdir": "skills/ai-shifu-course-creator",
-      "synced_commit": "24c42318e86fe339cca35d97bac322a99e9306a1",
-      "pinned": false
+      "repo": null,
+      "note": "ClawHub: heshaofu2/ai-shifu-course-creator v1.0.0 - AI-Shifu 课程创建工具"
     }
   }
 }

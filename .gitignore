@@ -3,5 +3,14 @@ repos/
 
 # Backup copies of skills
 skills-backup/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
 .DS_Store
+
+# Dev notes
 todo.md
