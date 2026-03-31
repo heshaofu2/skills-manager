@@ -2,7 +2,7 @@
 name: skills-manager
 description: Manage agent skills installed from GitHub repos. Use when the user wants to install a skill from a GitHub URL, check for skill updates, pull latest versions, remove skills, or view skill status. TRIGGER when the user provides a GitHub URL and asks to install/add it, or uses keywords like "install skill", "update skills", "check skill updates", "add skill", "remove skill", "skill status", "skill versions", "安装这个skill", "帮我装一下".
 user-invocable: true
-argument-hint: "[status|scan|install|uninstall|pull]"
+argument-hint: "[status|scan|register|install|uninstall|pull]"
 ---
 
 # Skills Manager
@@ -59,10 +59,19 @@ python3 ~/.agents/skills-manager/scripts/main.py status -r       # also check re
 
 ### Scan & Discover
 
-Auto-initialize environment (create directories, detect targets) on first run, then scan target directories for unmanaged skills. Interactively classify and register each one using heuristics.
+Auto-initialize environment on first run, then scan target directories and report unmanaged skills with their detected types. Does NOT register anything by default — the AI agent should present findings to the user and use `register` for selected skills. Use `-y` to auto-register all.
 
 ```bash
-python3 ~/.agents/skills-manager/scripts/main.py scan
+python3 ~/.agents/skills-manager/scripts/main.py scan            # report only
+python3 ~/.agents/skills-manager/scripts/main.py scan -y         # auto-register all
+```
+
+### Register a skill
+
+Register a specific unmanaged skill by name. Auto-detects its type (git-repo, clawhub, repo-synced, local).
+
+```bash
+python3 ~/.agents/skills-manager/scripts/main.py register <name>
 ```
 
 ### Pull updates
@@ -133,6 +142,8 @@ When skills are flagged as "private", warn the user about specific sensitive dat
 
 - User provides a GitHub URL → run `install <url>`
 - "update skills" / "check for updates" → run `status -r`, then ask if they want to `pull`
-- Fresh setup or "initialize" / "scan skills" → run `scan`
+- Fresh setup / "scan skills" → run `scan`, present findings to user, then `register <name>` for selected skills
+- "register all" / quick setup → run `scan -y`
+- "delete/remove a skill" → run `uninstall <name>`
 - `$ARGUMENTS` matches a subcommand → run it directly
 - `$ARGUMENTS` empty → run `status`

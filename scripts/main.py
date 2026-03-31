@@ -32,7 +32,8 @@ def main() -> None:
     p_status = sub.add_parser("status", help="Show all skills and their status")
     p_status.add_argument("-r", "--remote", action="store_true", help="Also check remote for updates")
 
-    sub.add_parser("scan", help="Initialize environment and discover unmanaged skills")
+    p_scan = sub.add_parser("scan", help="Initialize environment and discover unmanaged skills")
+    p_scan.add_argument("-y", "--yes", action="store_true", help="Auto-accept all prompts (non-interactive mode)")
 
     p_pull = sub.add_parser("pull", help="Pull updates and sync")
     p_pull.add_argument("target", nargs="?", default="", help="Repo or skill name")
@@ -40,6 +41,9 @@ def main() -> None:
     p_install = sub.add_parser("install", help="Install a skill from a GitHub URL")
     p_install.add_argument("url", help="GitHub URL (e.g. https://github.com/owner/repo/tree/main/skills/name)")
     p_install.add_argument("--name", help="Override skill name")
+
+    p_register = sub.add_parser("register", help="Register an unmanaged skill by name")
+    p_register.add_argument("name", help="Skill name")
 
     p_uninstall = sub.add_parser("uninstall", help="Uninstall a skill")
     p_uninstall.add_argument("name", help="Skill name")
@@ -76,6 +80,9 @@ def main() -> None:
         run(ctx, manifest, args)
     elif args.command == "install":
         from scripts.commands.install_cmd import run
+        run(ctx, manifest, args)
+    elif args.command == "register":
+        from scripts.commands.register_cmd import run
         run(ctx, manifest, args)
     elif args.command == "uninstall":
         from scripts.commands.uninstall_cmd import run

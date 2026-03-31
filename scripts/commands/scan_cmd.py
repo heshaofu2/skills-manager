@@ -1,4 +1,4 @@
-"""Scan: auto-initialize environment and discover unmanaged skills."""
+"""Scan: discover unmanaged skills and report findings."""
 
 from pathlib import Path
 
@@ -7,7 +7,6 @@ from scripts.manifest import Manifest
 from scripts.scanner import (
     detect_clawhub,
     detect_skill_nature,
-    collect_skills_from_targets,
     find_in_repos,
     find_skill_in_targets,
 )
@@ -15,46 +14,135 @@ from scripts.sync import sync_directory
 
 
 def _ensure_initialized(ctx, manifest: Manifest) -> None:
-    """Ensure directory structure and targets are set up (absorbed from init)."""
+    """Auto-detect and add target directories if none configured."""
     ctx.repos_dir.mkdir(parents=True, exist_ok=True)
 
-    targets = manifest.get_targets()
     if not manifest.data.get("targets"):
         print(output._c(output.BLUE, "[Setup] Detecting agent directories..."))
         candidates = [
             (Path.home() / ".claude" / "skills", "claude", "Claude Code"),
             (Path.home() / ".openclaw" / "workspace" / "skills", "openclaw", "OpenClaw"),
         ]
-        detected = False
         for dpath, dname, dlabel in candidates:
             if dpath.is_dir():
-                answer = input(f"  Found {dpath} ({dlabel}). Add as target? [Y/n] ").strip()
-                if not answer.lower().startswith('n'):
-                    manifest_path = manifest.to_manifest_path(dpath)
-                    manifest.add_target(dname, manifest_path)
-                    output.success(f"Added target: {dname}")
-                    detected = True
-        if not detected:
+                manifest_path = manifest.to_manifest_path(dpath)
+                manifest.add_target(dname, manifest_path)
+                output.success(f"Auto-added target: {dname} → {dpath}")
+        if not manifest.data.get("targets"):
             output.warn("No agent directories detected. Use add-target later.")
         print()
 
 
+def _classify_skill(name, entry, actual_dir, ctx, manifest):
+    """Classify a single unmanaged skill. Returns (kind, detail_dict)."""
+    mpath = manifest.to_manifest_path(entry)
+
+    # Git repo?
+    if actual_dir.is_dir() and git_ops.is_git_repo(actual_dir):
+        remote_url = git_ops.get_remote_url(actual_dir) or ""
+        return "git-repo", {"remote_url": remote_url, "mpath": mpath, "actual_dir": actual_dir}
+
+    # Symlink into a git repo?
+    if entry.is_symlink() and actual_dir.is_dir():
+        git_root = git_ops.get_git_root(actual_dir)
+        if git_root:
+            remote_url = git_ops.get_remote_url(git_root) or ""
+            return "git-repo", {"remote_url": remote_url, "mpath": mpath, "actual_dir": actual_dir}
+
+    # ClawHub?
+    if actual_dir.is_dir():
+        clawhub = detect_clawhub(actual_dir)
+        if clawhub:
+            return "clawhub", {"origin": clawhub, "mpath": mpath}
+
+    # Repo match?
+    match = find_in_repos(name, ctx.repos_dir, manifest)
+    if match:
+        return "repo-match", {"repo_key": match[0], "subdir": match[1], "mpath": mpath}
+
+    # Heuristics
+    nature = detect_skill_nature(actual_dir) if actual_dir.is_dir() else None
+    if nature and nature.kind == "private":
+        return "private", {"detail": nature.detail, "mpath": mpath}
+    elif nature and nature.kind == "has-source-url":
+        return "has-source-url", {"detail": nature.detail, "mpath": mpath}
+
+    return "unknown", {"mpath": mpath}
+
+
+def _register_skill(name, kind, detail, manifest):
+    """Register a single skill based on its classification."""
+    mpath = detail["mpath"]
+
+    if kind == "git-repo":
+        actual_mpath = manifest.to_manifest_path(detail["actual_dir"])
+        data = {"path": actual_mpath, "type": "git-repo", "pinned": False}
+        if detail.get("remote_url"):
+            data["repo_url"] = detail["remote_url"]
+        manifest.add_skill(name, data)
+
+    elif kind == "clawhub":
+        origin = detail["origin"]
+        manifest.add_skill(name, {
+            "path": mpath,
+            "type": "clawhub",
+            "clawhub_slug": origin.get("slug", name),
+            "clawhub_version": origin.get("installedVersion", "?"),
+            "clawhub_registry": origin.get("registry", "https://clawhub.ai"),
+            "pinned": False,
+        })
+
+    elif kind == "repo-match":
+        manifest.add_skill(name, {
+            "path": mpath,
+            "repo": detail["repo_key"],
+            "subdir": detail["subdir"],
+            "pinned": False,
+        })
+
+    elif kind == "private":
+        manifest.add_skill(name, {"path": mpath, "repo": None, "note": f"Private: {detail['detail']}"})
+
+    elif kind == "has-source-url":
+        manifest.add_skill(name, {"path": mpath, "repo": None, "note": f"Source: {detail['detail']}"})
+
+    else:  # unknown
+        manifest.add_skill(name, {"path": mpath, "repo": None})
+
+
+def _format_kind(kind, detail):
+    """Format classification for display."""
+    if kind == "git-repo":
+        url = detail.get("remote_url", "")
+        return f"git-repo{f': {url}' if url else ''}"
+    elif kind == "clawhub":
+        origin = detail["origin"]
+        return f"clawhub: {origin.get('slug', '?')}@{origin.get('installedVersion', '?')}"
+    elif kind == "repo-match":
+        return f"found in {detail['repo_key']}/{detail['subdir']}"
+    elif kind == "private":
+        return f"private ({detail['detail']})"
+    elif kind == "has-source-url":
+        return f"source: {detail['detail']}"
+    return "unknown origin"
+
+
 def run(ctx, manifest: Manifest, args) -> None:
+    auto_yes = getattr(args, "yes", False)
+
     output.header("Scan & Discover")
     print()
 
-    # Auto-initialize if needed
     _ensure_initialized(ctx, manifest)
-
     targets = manifest.get_targets()
 
-    # --- Part 1: Register unmanaged skills interactively ---
-    print(output._c(output.BLUE, "[Scanning existing skills]"))
+    # --- Scan and classify ---
+    print(output._c(output.BLUE, "[Scanning]"))
 
-    registered = 0
+    findings: list[tuple[str, str, dict]] = []  # (name, kind, detail)
     scanned: set[str] = set()
 
-    for tname, tpath in targets.items():
+    for _, tpath in targets.items():
         if not tpath.is_dir():
             continue
         for entry in sorted(tpath.iterdir()):
@@ -71,110 +159,36 @@ def run(ctx, manifest: Manifest, args) -> None:
                 if not skill.get("path"):
                     mpath = manifest.to_manifest_path(entry)
                     manifest.update_skill(name, path=mpath)
-                    output.success(f"✓ {name} — added path")
-                    registered += 1
+                    output.success(f"✓ {name} — fixed missing path")
                 continue
 
             actual_dir = entry.resolve() if entry.is_symlink() else entry
-            mpath = manifest.to_manifest_path(entry)
+            kind, detail = _classify_skill(name, entry, actual_dir, ctx, manifest)
+            findings.append((name, kind, detail))
 
-            # Git repo?
-            if actual_dir.is_dir() and git_ops.is_git_repo(actual_dir):
-                remote_url = git_ops.get_remote_url(actual_dir) or ""
-                label = f"git-repo{f': {remote_url}' if remote_url else ''}"
-                answer = input(f"  {output._c(output.BLUE, name)} ({label}) — register? [Y/n] ").strip()
-                if not answer.lower().startswith('n'):
-                    actual_mpath = manifest.to_manifest_path(actual_dir)
-                    data = {"path": actual_mpath, "type": "git-repo", "pinned": False}
-                    if remote_url:
-                        data["repo_url"] = remote_url
-                    manifest.add_skill(name, data)
-                    output.success("✓ Registered as git-repo")
-                    registered += 1
-                continue
+    # --- Report findings ---
+    if not findings:
+        print("  All skills are managed.")
+    else:
+        print(f"  Found {len(findings)} unmanaged skill(s):")
+        print()
+        for name, kind, detail in findings:
+            color = output.GREEN if kind in ("clawhub", "repo-match") else \
+                    output.BLUE if kind == "git-repo" else \
+                    output.YELLOW if kind == "private" else output.RED
+            print(f"  {output._c(color, name)} — {_format_kind(kind, detail)}")
 
-            # Symlink into a git repo?
-            if entry.is_symlink() and actual_dir.is_dir():
-                git_root = git_ops.get_git_root(actual_dir)
-                if git_root:
-                    remote_url = git_ops.get_remote_url(git_root) or ""
-                    rel = actual_dir.relative_to(git_root)
-                    label = f"git-repo subdir: {rel}"
-                    if remote_url:
-                        label += f" ({remote_url})"
-                    answer = input(f"  {output._c(output.BLUE, name)} ({label}) — register? [Y/n] ").strip()
-                    if not answer.lower().startswith('n'):
-                        actual_mpath = manifest.to_manifest_path(actual_dir)
-                        data = {"path": actual_mpath, "type": "git-repo", "pinned": False}
-                        if remote_url:
-                            data["repo_url"] = remote_url
-                        manifest.add_skill(name, data)
-                        output.success("✓ Registered as git-repo")
-                        registered += 1
-                    continue
+    # --- Auto-register if -y ---
+    registered = 0
+    if auto_yes and findings:
+        print()
+        print(output._c(output.BLUE, "[Auto-registering]"))
+        for name, kind, detail in findings:
+            _register_skill(name, kind, detail, manifest)
+            output.success(f"✓ {name} ({kind})")
+            registered += 1
 
-            # ClawHub installed?
-            clawhub = detect_clawhub(actual_dir) if actual_dir.is_dir() else None
-            if clawhub:
-                slug = clawhub.get("slug", name)
-                version = clawhub.get("installedVersion", "?")
-                registry = clawhub.get("registry", "https://clawhub.ai")
-                answer = input(f"  {output._c(output.GREEN, name)} (clawhub: {slug}@{version}) — register? [Y/n] ").strip()
-                if not answer.lower().startswith('n'):
-                    manifest.add_skill(name, {
-                        "path": mpath,
-                        "type": "clawhub",
-                        "clawhub_slug": slug,
-                        "clawhub_version": version,
-                        "clawhub_registry": registry,
-                        "pinned": False,
-                    })
-                    output.success("✓ Registered as clawhub")
-                    registered += 1
-                continue
-
-            # Try repo match
-            match = find_in_repos(name, ctx.repos_dir, manifest)
-            if match:
-                repo_key, subdir = match
-                answer = input(f"  {output._c(output.GREEN, name)} → found in {repo_key} — register? [Y/n] ").strip()
-                if not answer.lower().startswith('n'):
-                    manifest.add_skill(name, {"path": mpath, "repo": repo_key, "subdir": subdir, "pinned": False})
-                    output.success("✓ Registered")
-                    registered += 1
-                continue
-
-            # Heuristics
-            nature = detect_skill_nature(actual_dir) if actual_dir.is_dir() else None
-
-            if nature and nature.kind == "private":
-                answer = input(f"  {output._c(output.YELLOW, name)} ({nature.kind}:{nature.detail}) — register as local? [Y/n] ").strip()
-                if not answer.lower().startswith('n'):
-                    manifest.add_skill(name, {"path": mpath, "repo": None, "note": f"Private: {nature.detail}"})
-                    output.success("✓ Registered as local")
-                    registered += 1
-
-            elif nature and nature.kind == "has-source-url":
-                print(f"  {output._c(output.BLUE, name)} — found URL: {nature.detail}")
-                print("    [1] Register as local  [2] Skip")
-                choice = input("    Choice [1/2]: ").strip()
-                if choice == "1":
-                    manifest.add_skill(name, {"path": mpath, "repo": None, "note": f"Source: {nature.detail}"})
-                    output.success("✓ Registered as local")
-                    registered += 1
-
-            else:
-                print(f"  {output._c(output.RED, name)} — unknown origin")
-                print("    [1] Register as local  [2] Skip")
-                choice = input("    Choice [1/2]: ").strip()
-                if choice == "1":
-                    manifest.add_skill(name, {"path": mpath, "repo": None})
-                    output.success("✓ Registered as local")
-                    registered += 1
-
-    print()
-
-    # --- Part 2: Available in repos but not installed ---
+    # --- Available in repos but not installed ---
     available_in_repos = []
     if ctx.repos_dir.is_dir():
         for repo_dir in sorted(ctx.repos_dir.iterdir()):
@@ -196,56 +210,20 @@ def run(ctx, manifest: Manifest, args) -> None:
                 if not already:
                     available_in_repos.append((skill_name, repo_key, skill_subdir))
 
-    installed = 0
     if available_in_repos:
-        print(output._c(output.GREEN, "[Available in Repos — Not Installed]"))
-        targets = manifest.get_targets()
-        for sname, rname, subdir in available_in_repos:
-            answer = input(f"  {output._c(output.GREEN, sname)} ({rname}/{subdir}) — install? [y/N] ").strip()
-            if not answer.lower().startswith('y'):
-                continue
-            installed += _install_from_repo(ctx, manifest, sname, rname, subdir, targets)
         print()
+        print(output._c(output.GREEN, "[Available in Repos — Not Installed]"))
+        for sname, rname, subdir in available_in_repos:
+            print(f"  {output._c(output.GREEN, sname)} — {rname}/{subdir}")
 
     # --- Summary ---
-    output.header("Scan Complete")
-    print(f"  Registered: {registered}")
-    if installed:
-        print(f"  Installed from repos: {installed}")
-    print(f"  Total skills: {len(manifest.get_skills())}")
     print()
-
-
-def _install_from_repo(ctx, manifest: Manifest, name: str, repo: str, subdir: str, targets: dict) -> int:
-    """Install a skill from a repo clone into the first target directory."""
-    found = find_skill_in_targets(name, targets)
-    if found:
-        _, skill_path = found
-        output.warn(f"    Exists at {skill_path}, will overwrite with upstream")
-    else:
-        first_target = next((p for p in targets.values() if p.is_dir()), None)
-        if not first_target:
-            output.error("    No target directory available. Use add-target first.")
-            return 0
-        skill_path = first_target / name
-
-    repo_dir = ctx.repos_dir / manifest.repo_to_dir(repo)
-    git_ops.sparse_checkout_add(repo_dir, subdir)
-
-    source = repo_dir / subdir
-    if not source.is_dir():
-        output.error(f"    Directory '{subdir}' not found in repo after sparse checkout")
-        return 0
-
-    sync_directory(source, skill_path)
-
-    synced_commit = git_ops.get_head(repo_dir)
-    manifest.add_skill(name, {
-        "path": manifest.to_manifest_path(skill_path),
-        "repo": repo,
-        "subdir": subdir,
-        "synced_commit": synced_commit,
-        "pinned": False,
-    })
-    output.success(f"    ✓ Installed to {skill_path}")
-    return 1
+    output.header("Scan Complete")
+    if registered:
+        print(f"  Registered: {registered}")
+    if findings and not auto_yes:
+        print(f"  Unmanaged: {len(findings)} (use 'register <name>' to register, or 'scan -y' to register all)")
+    print(f"  Total managed: {len(manifest.get_skills())}")
+    if available_in_repos:
+        print(f"  Available to install: {len(available_in_repos)} (use 'install <url>' to install)")
+    print()
