@@ -1,6 +1,6 @@
 ---
 name: skills-manager
-description: Manage agent skills installed from GitHub repos. Use when the user wants to install a skill from a GitHub URL, check for skill updates, pull latest versions, remove skills, or view skill status. TRIGGER when the user provides a GitHub URL and asks to install/add it, or uses keywords like "install skill", "update skills", "check skill updates", "add skill", "remove skill", "skill status", "skill versions", "安装这个skill", "帮我装一下".
+description: Manage agent skills installed from GitHub repos. Use when the user wants to install a skill from a GitHub URL, check for skill updates, pull latest versions, remove skills, view skill status, or check whether an installed skill is up-to-date. TRIGGER when the user provides a GitHub URL and asks to install/add it, or uses keywords like "install skill", "update skills", "check skill updates", "add skill", "remove skill", "skill status", "skill versions", "是否最新", "是不是最新版", "最新版本吗", "有没有更新", "需要更新吗", "版本是多少", "安装这个skill", "帮我装一下".
 user-invocable: true
 argument-hint: "[status|scan|register|install|uninstall|pull]"
 ---
