@@ -42,23 +42,6 @@ def main() -> None:
     p_add_repo.add_argument("url", help="Git URL")
     p_add_repo.add_argument("branch", nargs="?", default="main", help="Branch (default: main)")
 
-    p_add_skill = sub.add_parser("add-skill", help="Install a skill from a repo")
-    p_add_skill.add_argument("name", help="Skill name")
-    p_add_skill.add_argument("repo", help="Repo name")
-    p_add_skill.add_argument("subdir", help="Subdirectory in repo")
-
-    p_add_git = sub.add_parser("add-git", help="Register a git-repo skill")
-    p_add_git.add_argument("name", help="Skill name")
-    p_add_git.add_argument("path", help="Path to git repo")
-    p_add_git.add_argument("repo_url", nargs="?", default=None, help="Remote URL")
-
-    p_add_local = sub.add_parser("add-local", help="Register a local skill")
-    p_add_local.add_argument("name", help="Skill name")
-    p_add_local.add_argument("note", nargs="?", default="", help="Description note")
-
-    p_remove = sub.add_parser("remove", help="Unregister a skill")
-    p_remove.add_argument("name", help="Skill name")
-
     p_add_target = sub.add_parser("add-target", help="Add a target directory")
     p_add_target.add_argument("name", help="Target name")
     p_add_target.add_argument("path", help="Directory path")
@@ -86,18 +69,6 @@ def main() -> None:
     elif args.command == "add-repo":
         from scripts.commands.add_cmd import run_add_repo
         run_add_repo(ctx, manifest, args)
-    elif args.command == "add-skill":
-        from scripts.commands.add_cmd import run_add_skill
-        run_add_skill(ctx, manifest, args)
-    elif args.command == "add-git":
-        from scripts.commands.add_cmd import run_add_git
-        run_add_git(ctx, manifest, args)
-    elif args.command == "add-local":
-        from scripts.commands.add_cmd import run_add_local
-        run_add_local(ctx, manifest, args)
-    elif args.command == "remove":
-        from scripts.commands.remove_cmd import run
-        run(ctx, manifest, args)
     elif args.command == "add-target":
         from scripts.commands.target_cmd import run_add
         run_add(ctx, manifest, args)

@@ -77,41 +77,13 @@ python3 ~/.agents/skills-manager/scripts/main.py pull <skill-name>  # specific s
 
 ### Add a new skill from GitHub
 
-**Step 1: Register the repo** (skip if already registered)
+Register a repo source, then run `scan` to interactively discover and install skills from it.
 
 ```bash
 python3 ~/.agents/skills-manager/scripts/main.py add-repo <name> <url> [branch]
+python3 ~/.agents/skills-manager/scripts/main.py scan
 ```
 
-**Step 2: Install the skill** — syncs content to target directory and records path
-
-```bash
-python3 ~/.agents/skills-manager/scripts/main.py add-skill <name> <repo> <subdir>
-```
-
-### Register a git-repo skill
-
-For skills that are themselves git repositories (updated via `git pull`):
-
-```bash
-python3 ~/.agents/skills-manager/scripts/main.py add-git <name> <path> [repo-url]
-```
-
-### Register a local skill
-
-For skills with no upstream repo (private/infrastructure):
-
-```bash
-python3 ~/.agents/skills-manager/scripts/main.py add-local <name> [note]
-```
-
-### Remove a skill
-
-Remove from manifest only. Files at the skill's path are NOT deleted.
-
-```bash
-python3 ~/.agents/skills-manager/scripts/main.py remove <name>
-```
 
 ### Manage target platforms
 
@@ -131,7 +103,7 @@ When `scan` reports "unknown origin" skills, do NOT simply register as local. In
 1. **Read the skill's SKILL.md** — extract author, description, URLs
 2. **Search GitHub** via WebSearch — try `"<skill-name>" site:github.com SKILL.md`
 3. **Verify the match** — check the repo contains matching content
-4. **Act**: found repo → `add-repo` + `add-skill`; not found → `add-local`
+4. **Act**: found repo → `add-repo` then `scan` to install; not found → `add-local`
 
 ### Sensitive Data Detection
 
@@ -141,7 +113,7 @@ When skills are flagged as "private", warn the user about specific sensitive dat
 
 - "update skills" / "check for updates" → run `status -r`, then ask if they want to `pull`
 - Fresh setup or "initialize" / "scan skills" → run `scan`
-- "install a skill from GitHub" → guide through `add-repo` + `add-skill`
+- "install a skill from GitHub" → `add-repo` then `scan` to discover and install
 - "register a skill that is its own git repo" → use `add-git`
 - `$ARGUMENTS` matches a subcommand → run it directly
 - `$ARGUMENTS` empty → run `status`

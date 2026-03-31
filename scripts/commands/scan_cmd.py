@@ -8,7 +8,9 @@ from scripts.scanner import (
     detect_skill_nature,
     collect_skills_from_targets,
     find_in_repos,
+    find_skill_in_targets,
 )
+from scripts.sync import sync_directory
 
 
 def _ensure_initialized(ctx, manifest: Manifest) -> None:
@@ -173,27 +175,56 @@ def run(ctx, manifest: Manifest, args) -> None:
                 if not already:
                     available_in_repos.append((skill_name, repo_key, skill_subdir))
 
+    installed = 0
     if available_in_repos:
         print(output._c(output.GREEN, "[Available in Repos — Not Installed]"))
-        prev_repo = ""
-        count = 0
+        targets = manifest.get_targets()
         for sname, rname, subdir in available_in_repos:
-            if rname != prev_repo:
-                if prev_repo:
-                    print()
-                print(f"  {output._c(output.GREEN, rname)}:")
-                prev_repo = rname
-            count += 1
-            if count <= 20:
-                print(f"    {sname}  {output._c(output.BLUE, f'→ skills-manager add-skill {sname} {rname} {subdir}')}")
-        if count > 20:
-            print(f"    ... and {count - 20} more")
+            answer = input(f"  {output._c(output.GREEN, sname)} ({rname}/{subdir}) — install? [y/N] ").strip()
+            if not answer.lower().startswith('y'):
+                continue
+            installed += _install_from_repo(ctx, manifest, sname, rname, subdir, targets)
         print()
 
     # --- Summary ---
     output.header("Scan Complete")
     print(f"  Registered: {registered}")
+    if installed:
+        print(f"  Installed from repos: {installed}")
     print(f"  Total skills: {len(manifest.get_skills())}")
-    if available_in_repos:
-        print(f"  Available to install: {len(available_in_repos)}")
     print()
+
+
+def _install_from_repo(ctx, manifest: Manifest, name: str, repo: str, subdir: str, targets: dict) -> int:
+    """Install a skill from a repo clone into the first target directory."""
+    found = find_skill_in_targets(name, targets)
+    if found:
+        _, skill_path = found
+        output.warn(f"    Exists at {skill_path}, will overwrite with upstream")
+    else:
+        first_target = next((p for p in targets.values() if p.is_dir()), None)
+        if not first_target:
+            output.error("    No target directory available. Use add-target first.")
+            return 0
+        skill_path = first_target / name
+
+    repo_dir = ctx.repos_dir / manifest.repo_to_dir(repo)
+    git_ops.sparse_checkout_add(repo_dir, subdir)
+
+    source = repo_dir / subdir
+    if not source.is_dir():
+        output.error(f"    Directory '{subdir}' not found in repo after sparse checkout")
+        return 0
+
+    sync_directory(source, skill_path)
+
+    synced_commit = git_ops.get_head(repo_dir)
+    manifest.add_skill(name, {
+        "path": manifest.to_manifest_path(skill_path),
+        "repo": repo,
+        "subdir": subdir,
+        "synced_commit": synced_commit,
+        "pinned": False,
+    })
+    output.success(f"    ✓ Installed to {skill_path}")
+    return 1
