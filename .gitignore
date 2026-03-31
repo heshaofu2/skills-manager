@@ -12,6 +12,10 @@ __pycache__/
 # OS
 .DS_Store
 
+# ClawHub test artifacts
+.clawhub/
+skills/
+
 # Dev notes
 todo.md
 manifest.json

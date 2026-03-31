@@ -51,6 +51,11 @@ def run(ctx, manifest: Manifest, args) -> None:
         elif stype == "repo-synced":
             _show_repo_synced(ctx, manifest, name, skill, path, path_status, pin_marker, remote, repo_remote_info)
 
+        elif stype == "clawhub":
+            slug = skill.get("clawhub_slug", name)
+            version = skill.get("clawhub_version", "?")
+            print(f"  {output._c(output.GREEN, name)} (clawhub) [{slug}@{version}] {path}{path_status}{pin_marker}")
+
         elif stype == "local":
             note = skill.get("note", "")
             print(f"  {output._c(output.YELLOW, name)} (local) {path} {note}")

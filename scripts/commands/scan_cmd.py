@@ -5,6 +5,7 @@ from pathlib import Path
 from scripts import output, git_ops
 from scripts.manifest import Manifest
 from scripts.scanner import (
+    detect_clawhub,
     detect_skill_nature,
     collect_skills_from_targets,
     find_in_repos,
@@ -22,7 +23,7 @@ def _ensure_initialized(ctx, manifest: Manifest) -> None:
         print(output._c(output.BLUE, "[Setup] Detecting agent directories..."))
         candidates = [
             (Path.home() / ".claude" / "skills", "claude", "Claude Code"),
-            (Path.home() / ".openclaw" / "skills", "openclaw", "OpenClaw"),
+            (Path.home() / ".openclaw" / "workspace" / "skills", "openclaw", "OpenClaw"),
         ]
         detected = False
         for dpath, dname, dlabel in candidates:
@@ -111,6 +112,26 @@ def run(ctx, manifest: Manifest, args) -> None:
                         output.success("✓ Registered as git-repo")
                         registered += 1
                     continue
+
+            # ClawHub installed?
+            clawhub = detect_clawhub(actual_dir) if actual_dir.is_dir() else None
+            if clawhub:
+                slug = clawhub.get("slug", name)
+                version = clawhub.get("installedVersion", "?")
+                registry = clawhub.get("registry", "https://clawhub.ai")
+                answer = input(f"  {output._c(output.GREEN, name)} (clawhub: {slug}@{version}) — register? [Y/n] ").strip()
+                if not answer.lower().startswith('n'):
+                    manifest.add_skill(name, {
+                        "path": mpath,
+                        "type": "clawhub",
+                        "clawhub_slug": slug,
+                        "clawhub_version": version,
+                        "clawhub_registry": registry,
+                        "pinned": False,
+                    })
+                    output.success("✓ Registered as clawhub")
+                    registered += 1
+                continue
 
             # Try repo match
             match = find_in_repos(name, ctx.repos_dir, manifest)

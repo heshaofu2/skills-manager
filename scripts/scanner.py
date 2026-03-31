@@ -1,5 +1,6 @@
 """Skill discovery and classification."""
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Optional
 
 @dataclass
 class SkillNature:
-    kind: str  # "private", "has-source-url", "clean"
+    kind: str  # "clawhub", "private", "has-source-url", "clean"
     detail: str = ""
 
 
@@ -19,8 +20,26 @@ _CRED_RE = re.compile(r'password|token|secret|credential|api.key', re.IGNORECASE
 _GITHUB_RE = re.compile(r'github\.com/[\w._-]+/[\w._-]+')
 
 
+def detect_clawhub(skill_dir: Path) -> Optional[dict]:
+    """Check if a skill was installed via ClawHub. Returns origin info or None."""
+    origin = skill_dir / ".clawhub" / "origin.json"
+    if origin.is_file():
+        try:
+            return json.loads(origin.read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+    return None
+
+
 def detect_skill_nature(skill_dir: Path) -> SkillNature:
     """Classify a skill directory using heuristics."""
+    # Check for ClawHub origin
+    clawhub = detect_clawhub(skill_dir)
+    if clawhub:
+        slug = clawhub.get("slug", "")
+        version = clawhub.get("installedVersion", "?")
+        return SkillNature("clawhub", f"{slug}@{version}")
+
     # Check for sensitive files
     for pattern in _SENSITIVE_PATTERNS:
         matches = list(skill_dir.rglob(pattern))

@@ -106,6 +106,8 @@ class Manifest:
             return "unknown"
         if skill.get("type") == "git-repo":
             return "git-repo"
+        if skill.get("type") == "clawhub":
+            return "clawhub"
         if skill.get("repo") not in (None, "null"):
             return "repo-synced"
         return "local"
