@@ -37,6 +37,14 @@ def main() -> None:
     p_pull = sub.add_parser("pull", help="Pull updates and sync")
     p_pull.add_argument("target", nargs="?", default="", help="Repo or skill name")
 
+    p_install = sub.add_parser("install", help="Install a skill from a GitHub URL")
+    p_install.add_argument("url", help="GitHub URL (e.g. https://github.com/owner/repo/tree/main/skills/name)")
+    p_install.add_argument("--name", help="Override skill name")
+
+    p_uninstall = sub.add_parser("uninstall", help="Uninstall a skill")
+    p_uninstall.add_argument("name", help="Skill name")
+    p_uninstall.add_argument("--keep-files", action="store_true", help="Only remove from manifest, keep files")
+
     p_add_repo = sub.add_parser("add-repo", help="Register a new repo source")
     p_add_repo.add_argument("name", help="Local name for the repo (e.g. anthropics/skills)")
     p_add_repo.add_argument("url", help="Git URL")
@@ -65,6 +73,12 @@ def main() -> None:
         run(ctx, manifest, args)
     elif args.command == "pull":
         from scripts.commands.pull_cmd import run
+        run(ctx, manifest, args)
+    elif args.command == "install":
+        from scripts.commands.install_cmd import run
+        run(ctx, manifest, args)
+    elif args.command == "uninstall":
+        from scripts.commands.uninstall_cmd import run
         run(ctx, manifest, args)
     elif args.command == "add-repo":
         from scripts.commands.add_cmd import run_add_repo

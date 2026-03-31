@@ -1,8 +1,8 @@
 ---
 name: skills-manager
-description: Manage agent skills installed from GitHub repos. Use when the user wants to check for skill updates, pull latest versions, install new skills from a repo, remove skills, or view skill status and sources. Trigger keywords include "update skills", "check skill updates", "install skill", "add skill", "remove skill", "skill status", "skill versions".
+description: Manage agent skills installed from GitHub repos. Use when the user wants to install a skill from a GitHub URL, check for skill updates, pull latest versions, remove skills, or view skill status. TRIGGER when the user provides a GitHub URL and asks to install/add it, or uses keywords like "install skill", "update skills", "check skill updates", "add skill", "remove skill", "skill status", "skill versions", "安装这个skill", "帮我装一下".
 user-invocable: true
-argument-hint: "[status|scan|pull|add|remove]"
+argument-hint: "[status|scan|install|uninstall|pull]"
 ---
 
 # Skills Manager
@@ -75,13 +75,33 @@ python3 ~/.agents/skills-manager/scripts/main.py pull <repo-name>   # specific r
 python3 ~/.agents/skills-manager/scripts/main.py pull <skill-name>  # specific skill
 ```
 
-### Add a new skill from GitHub
+### Install a skill from GitHub URL
 
-Register a repo source, then run `scan` to interactively discover and install skills from it.
+One command to install: parses the URL, registers the repo if needed, sparse-checkouts the subdir, syncs files, and registers in manifest.
+
+```bash
+python3 ~/.agents/skills-manager/scripts/main.py install <github-url> [--name <custom-name>]
+```
+
+Supported URL formats:
+- `https://github.com/owner/repo/tree/branch/path/to/skill` — subdir of a repo
+- `https://github.com/owner/repo` — whole repo is the skill
+
+### Uninstall a skill
+
+Remove from manifest and delete files. Use `--keep-files` to only remove the registration.
+
+```bash
+python3 ~/.agents/skills-manager/scripts/main.py uninstall <name>
+python3 ~/.agents/skills-manager/scripts/main.py uninstall <name> --keep-files
+```
+
+### Add a repo source (advanced)
+
+Register a repo without installing a specific skill. Use `scan` afterwards to discover available skills.
 
 ```bash
 python3 ~/.agents/skills-manager/scripts/main.py add-repo <name> <url> [branch]
-python3 ~/.agents/skills-manager/scripts/main.py scan
 ```
 
 
@@ -111,9 +131,8 @@ When skills are flagged as "private", warn the user about specific sensitive dat
 
 ## Handling User Requests
 
+- User provides a GitHub URL → run `install <url>`
 - "update skills" / "check for updates" → run `status -r`, then ask if they want to `pull`
 - Fresh setup or "initialize" / "scan skills" → run `scan`
-- "install a skill from GitHub" → `add-repo` then `scan` to discover and install
-- "register a skill that is its own git repo" → use `add-git`
 - `$ARGUMENTS` matches a subcommand → run it directly
 - `$ARGUMENTS` empty → run `status`
