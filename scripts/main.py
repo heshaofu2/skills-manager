@@ -29,9 +29,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="skills-manager", description="Manage agent skills from GitHub repos")
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("init", help="Initialize: scan and register existing skills")
-    sub.add_parser("list", help="List all skills and their status")
-    sub.add_parser("check", help="Check for available updates")
+    p_status = sub.add_parser("status", help="Show all skills and their status")
+    p_status.add_argument("-r", "--remote", action="store_true", help="Also check remote for updates")
+
+    sub.add_parser("scan", help="Initialize environment and discover unmanaged skills")
 
     p_pull = sub.add_parser("pull", help="Pull updates and sync")
     p_pull.add_argument("target", nargs="?", default="", help="Repo or skill name")
@@ -65,8 +66,6 @@ def main() -> None:
     p_remove_target = sub.add_parser("remove-target", help="Remove a target directory")
     p_remove_target.add_argument("name", help="Target name")
 
-    sub.add_parser("scan", help="Scan and recommend unmanaged skills")
-
     args = parser.parse_args()
 
     if not args.command:
@@ -75,14 +74,11 @@ def main() -> None:
 
     manifest = Manifest(ctx.manifest_path)
 
-    if args.command == "init":
-        from scripts.commands.init_cmd import run
+    if args.command == "status":
+        from scripts.commands.status_cmd import run
         run(ctx, manifest, args)
-    elif args.command == "list":
-        from scripts.commands.list_cmd import run
-        run(ctx, manifest, args)
-    elif args.command == "check":
-        from scripts.commands.check_cmd import run
+    elif args.command == "scan":
+        from scripts.commands.scan_cmd import run
         run(ctx, manifest, args)
     elif args.command == "pull":
         from scripts.commands.pull_cmd import run
@@ -108,9 +104,6 @@ def main() -> None:
     elif args.command == "remove-target":
         from scripts.commands.target_cmd import run_remove
         run_remove(ctx, manifest, args)
-    elif args.command == "scan":
-        from scripts.commands.scan_cmd import run
-        run(ctx, manifest, args)
 
 
 if __name__ == "__main__":

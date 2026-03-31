@@ -2,7 +2,7 @@
 name: skills-manager
 description: Manage agent skills installed from GitHub repos. Use when the user wants to check for skill updates, pull latest versions, install new skills from a repo, remove skills, or view skill status and sources. Trigger keywords include "update skills", "check skill updates", "install skill", "add skill", "remove skill", "skill status", "skill versions".
 user-invocable: true
-argument-hint: "[init|list|check|pull|scan|add|remove]"
+argument-hint: "[status|scan|pull|add|remove]"
 ---
 
 # Skills Manager
@@ -48,28 +48,21 @@ python3 ~/.agents/skills-manager/scripts/main.py
 
 When the user invokes this skill, run the appropriate subcommand based on `$ARGUMENTS` or the user's intent:
 
-### Initialize (first-time setup)
+### Status (default)
 
-Scan existing skills across all target directories, classify them using heuristics, and register them in the manifest with their actual paths. No files are moved.
+Show all registered skills with their types, paths, and commit hashes. Add `-r` to also fetch remotes and check for available updates.
 
 ```bash
-python3 ~/.agents/skills-manager/scripts/main.py init
+python3 ~/.agents/skills-manager/scripts/main.py status          # local info only
+python3 ~/.agents/skills-manager/scripts/main.py status -r       # also check remote for updates
 ```
 
-### List all skills
+### Scan & Discover
 
-Show all registered skills with their types, paths, and commit hashes.
-
-```bash
-python3 ~/.agents/skills-manager/scripts/main.py list
-```
-
-### Check for updates
-
-Fetch from upstream repos and use **subdir-level diff** to detect real changes per skill (not just repo-level commits). Also checks git-repo type skills.
+Auto-initialize environment (create directories, detect targets) on first run, then scan target directories for unmanaged skills. Interactively classify and register each one using heuristics.
 
 ```bash
-python3 ~/.agents/skills-manager/scripts/main.py check
+python3 ~/.agents/skills-manager/scripts/main.py scan
 ```
 
 ### Pull updates
@@ -80,14 +73,6 @@ Pull latest changes and sync to skill paths. For repo-synced skills, pulls the r
 python3 ~/.agents/skills-manager/scripts/main.py pull              # all
 python3 ~/.agents/skills-manager/scripts/main.py pull <repo-name>   # specific repo
 python3 ~/.agents/skills-manager/scripts/main.py pull <skill-name>  # specific skill
-```
-
-### Scan and recommend
-
-Scan target directories for unmanaged skills. Uses heuristics to classify each one.
-
-```bash
-python3 ~/.agents/skills-manager/scripts/main.py scan
 ```
 
 ### Add a new skill from GitHub
@@ -141,7 +126,7 @@ The Python scripts handle mechanical operations. As an AI agent, you add intelli
 
 ### Origin Discovery for Unknown Skills
 
-When `init` or `scan` reports "unknown origin" skills, do NOT simply register as local. Instead:
+When `scan` reports "unknown origin" skills, do NOT simply register as local. Instead:
 
 1. **Read the skill's SKILL.md** — extract author, description, URLs
 2. **Search GitHub** via WebSearch — try `"<skill-name>" site:github.com SKILL.md`
@@ -154,10 +139,9 @@ When skills are flagged as "private", warn the user about specific sensitive dat
 
 ## Handling User Requests
 
-- Fresh setup or "initialize" → run `init`
-- "update skills" / "check for updates" → run `check`, then ask if they want to `pull`
+- "update skills" / "check for updates" → run `status -r`, then ask if they want to `pull`
+- Fresh setup or "initialize" / "scan skills" → run `scan`
 - "install a skill from GitHub" → guide through `add-repo` + `add-skill`
 - "register a skill that is its own git repo" → use `add-git`
-- "scan skills" / "what skills need attention" → run `scan`
 - `$ARGUMENTS` matches a subcommand → run it directly
-- `$ARGUMENTS` empty → run `list`
+- `$ARGUMENTS` empty → run `status`
