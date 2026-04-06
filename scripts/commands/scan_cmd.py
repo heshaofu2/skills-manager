@@ -10,8 +10,6 @@ from scripts.scanner import (
     find_in_repos,
     find_skill_in_targets,
 )
-from scripts.sync import sync_directory
-
 
 def _ensure_initialized(ctx, manifest: Manifest) -> None:
     """Auto-detect and add target directories if none configured."""
