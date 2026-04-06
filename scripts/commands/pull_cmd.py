@@ -2,7 +2,7 @@
 
 from scripts import output, git_ops
 from scripts.manifest import Manifest
-from scripts.sync import ensure_symlink, is_symlinked, sync_directory
+from scripts.sync import ensure_symlink
 
 
 def run(ctx, manifest: Manifest, args) -> None:
@@ -89,15 +89,10 @@ def _pull_repo(ctx, manifest: Manifest, repo_key: str) -> None:
             print(f"    {sname}... ", end="", flush=True)
             manifest.update_skill(sname, synced_commit=new_commit)
             print(output._c(output.GREEN, "linked ✓"))
-        elif subdir != ".":
+        else:
             # Migrate from copy to symlink
             print(f"    Linking {sname}... ", end="", flush=True)
             ensure_symlink(source, dest)
-            manifest.update_skill(sname, synced_commit=new_commit)
-            print(output._c(output.GREEN, "done"))
-        else:
-            print(f"    Syncing {sname}... ", end="", flush=True)
-            sync_directory(source, dest)
             manifest.update_skill(sname, synced_commit=new_commit)
             print(output._c(output.GREEN, "done"))
 

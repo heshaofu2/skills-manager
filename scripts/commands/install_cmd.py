@@ -6,7 +6,7 @@ from typing import Optional
 
 from scripts import output, git_ops
 from scripts.manifest import Manifest
-from scripts.sync import ensure_symlink, sync_directory
+from scripts.sync import ensure_symlink
 
 
 def parse_github_url(url: str) -> Optional[dict]:
@@ -122,12 +122,8 @@ def run(ctx, manifest: Manifest, args) -> None:
         return
 
     skill_path = first_target / skill_name
-    if subdir != ".":
-        print(f"  Linking to {skill_path}...")
-        ensure_symlink(source, skill_path)
-    else:
-        print(f"  Syncing to {skill_path}...")
-        sync_directory(source, skill_path)
+    print(f"  Linking to {skill_path}...")
+    ensure_symlink(source, skill_path)
 
     # Step 4: Register in manifest
     synced_commit = git_ops.get_head(repo_dir)
