@@ -2,7 +2,7 @@
 
 from scripts import output, git_ops
 from scripts.manifest import Manifest
-from scripts.sync import sync_directory
+from scripts.sync import ensure_symlink, is_symlinked, sync_directory
 
 
 def run(ctx, manifest: Manifest, args) -> None:
@@ -69,6 +69,7 @@ def _pull_repo(ctx, manifest: Manifest, repo_key: str) -> None:
             print("already up to date")
 
     # Sync to skill paths
+    new_commit = git_ops.get_head(repo_dir)
     for sname, sdata in manifest.get_skills_for_repo(repo_key).items():
         if sdata.get("pinned"):
             output.warn(f"  {sname} [PINNED] — skipped")
@@ -78,15 +79,27 @@ def _pull_repo(ctx, manifest: Manifest, repo_key: str) -> None:
         if not dest:
             continue
 
-        print(f"    Syncing {sname}... ", end="", flush=True)
         source = repo_dir / subdir
         if not source.is_dir():
-            output.error(f"source {repo_key}/{subdir} not found")
+            output.error(f"  source {repo_key}/{subdir} not found")
             continue
-        sync_directory(source, dest)
-        new_commit = git_ops.get_head(repo_dir)
-        manifest.update_skill(sname, synced_commit=new_commit)
-        print(output._c(output.GREEN, "done"))
+
+        if dest.is_symlink() and dest.resolve() == source.resolve():
+            # Symlinked — git pull already updated content, just update commit
+            print(f"    {sname}... ", end="", flush=True)
+            manifest.update_skill(sname, synced_commit=new_commit)
+            print(output._c(output.GREEN, "linked ✓"))
+        elif subdir != ".":
+            # Migrate from copy to symlink
+            print(f"    Linking {sname}... ", end="", flush=True)
+            ensure_symlink(source, dest)
+            manifest.update_skill(sname, synced_commit=new_commit)
+            print(output._c(output.GREEN, "done"))
+        else:
+            print(f"    Syncing {sname}... ", end="", flush=True)
+            sync_directory(source, dest)
+            manifest.update_skill(sname, synced_commit=new_commit)
+            print(output._c(output.GREEN, "done"))
 
 
 def _pull_git_skill(manifest: Manifest, name: str) -> None:

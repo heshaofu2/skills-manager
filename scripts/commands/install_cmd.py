@@ -6,7 +6,7 @@ from typing import Optional
 
 from scripts import output, git_ops
 from scripts.manifest import Manifest
-from scripts.sync import sync_directory
+from scripts.sync import ensure_symlink, sync_directory
 
 
 def parse_github_url(url: str) -> Optional[dict]:
@@ -114,7 +114,7 @@ def run(ctx, manifest: Manifest, args) -> None:
     if not (source / "SKILL.md").is_file():
         output.warn(f"No SKILL.md found in {subdir}. Installing anyway.")
 
-    # Step 3: Sync to target directory
+    # Step 3: Link to target directory (symlink for subdirs, copy for whole-repo)
     targets = manifest.get_targets()
     first_target = next((p for p in targets.values() if p.is_dir()), None)
     if not first_target:
@@ -122,8 +122,12 @@ def run(ctx, manifest: Manifest, args) -> None:
         return
 
     skill_path = first_target / skill_name
-    print(f"  Syncing to {skill_path}...")
-    sync_directory(source, skill_path)
+    if subdir != ".":
+        print(f"  Linking to {skill_path}...")
+        ensure_symlink(source, skill_path)
+    else:
+        print(f"  Syncing to {skill_path}...")
+        sync_directory(source, skill_path)
 
     # Step 4: Register in manifest
     synced_commit = git_ops.get_head(repo_dir)

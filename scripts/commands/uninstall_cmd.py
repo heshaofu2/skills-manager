@@ -34,10 +34,16 @@ def run(ctx, manifest: Manifest, args) -> None:
             git_ops.sparse_checkout_set(repo_dir, subdirs)
 
     # Delete files unless --keep-files
-    if expanded and expanded.is_dir() and not keep_files:
-        shutil.rmtree(expanded)
-        output.success(f"✓ {name} uninstalled (files deleted: {expanded})")
+    if expanded and not keep_files:
+        if expanded.is_symlink():
+            expanded.unlink()  # Remove symlink only, not the source
+            output.success(f"✓ {name} uninstalled (symlink removed: {expanded})")
+        elif expanded.is_dir():
+            shutil.rmtree(expanded)
+            output.success(f"✓ {name} uninstalled (files deleted: {expanded})")
+        else:
+            output.success(f"✓ {name} removed from manifest")
     else:
         output.success(f"✓ {name} removed from manifest")
-        if expanded and expanded.is_dir():
+        if expanded and (expanded.is_dir() or expanded.is_symlink()):
             print(f"  Files kept at {expanded}")
