@@ -19,3 +19,6 @@ skills/
 # Dev notes
 todo.md
 manifest.json
+eval-results/trigger-eval.json
+eval-results/report.html
+eval-results/optimization-log.txt
