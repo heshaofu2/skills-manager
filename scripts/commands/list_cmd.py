@@ -78,19 +78,33 @@ def run(ctx, manifest: Manifest, args) -> None:
     output.header(f"Installed Skills ({len(all_names)})")
     print()
 
+    COL_NAME = 24
+    COL_TYPE = 12
+    COL_DESC = 60
+    divider = f"  +-{'-' * COL_NAME}-+-{'-' * COL_TYPE}-+-{'-' * COL_DESC}-+"
+    header_row = (
+        f"  | {'Skill':<{COL_NAME}} | {'Type':<{COL_TYPE}} | {'Description':<{COL_DESC}} |"
+    )
+
     for category in _CATEGORY_ORDER:
         entries = skills_by_category.get(category, [])
         if not entries:
             continue
 
         print(f"  {output._c(output.BLUE, category)}")
-        print(f"  {'─' * 70}")
+        print(divider)
+        print(header_row)
+        print(divider)
 
-        name_w = max(len(n) for n, _, _ in entries) + 2
         for name, desc, stype in entries:
-            type_tag = f"({stype})" if stype != "unmanaged" else ""
-            type_col = output._c(output.YELLOW, f"{type_tag:<14}") if type_tag else " " * 14
-            desc_col = desc or output._c(output.RED, "(no description)")
-            print(f"  {output._c(output.GREEN, name):<{name_w + 10}}  {type_col}  {desc_col}")
+            type_tag = stype if stype != "unmanaged" else "-"
+            desc_val = desc[:COL_DESC] if desc else "(no description)"
+            name_col = output._c(output.GREEN, name)
+            type_col = output._c(output.YELLOW, type_tag)
+            # pad manually since ANSI codes inflate len()
+            name_pad = " " * max(0, COL_NAME - len(name))
+            type_pad = " " * max(0, COL_TYPE - len(type_tag))
+            print(f"  | {name_col}{name_pad} | {type_col}{type_pad} | {desc_val:<{COL_DESC}} |")
 
+        print(divider)
         print()
