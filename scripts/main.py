@@ -29,6 +29,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="skills-manager", description="Manage agent skills from GitHub repos")
     sub = parser.add_subparsers(dest="command")
 
+    sub.add_parser("list", help="List all installed skills grouped by category with descriptions")
+
     p_status = sub.add_parser("status", help="Show all skills and their status")
     p_status.add_argument("-r", "--remote", action="store_true", help="Also check remote for updates")
 
@@ -69,7 +71,10 @@ def main() -> None:
 
     manifest = Manifest(ctx.manifest_path)
 
-    if args.command == "status":
+    if args.command == "list":
+        from scripts.commands.list_cmd import run
+        run(ctx, manifest, args)
+    elif args.command == "status":
         from scripts.commands.status_cmd import run
         run(ctx, manifest, args)
     elif args.command == "scan":
