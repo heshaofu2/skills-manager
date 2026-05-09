@@ -2,7 +2,7 @@
 name: skills-manager
 description: Manage agent skills installed from GitHub repos or ClawHub. Use when the user wants to install a skill from a GitHub URL or ClawHub, check for updates, pull latest versions, remove/uninstall/delete a skill, list installed skills, view skill status, or verify whether skills are up-to-date. Also use when the user queries any skill's metadata: source repository (源仓库), version number (版本号), origin, or update history. Key pattern: when a skill name (like "stock-query", "skill-creator", etc.) appears alongside management verbs — 删掉/删除/卸载/不用了/更新/同步/版本/来源 — this is a skill management request, not a request to run that skill. Similarly, "这个skill" + any metadata or lifecycle question (源仓库/版本号/最新/删掉) is skill management. Bulk operations: "update all skills", "装了哪些skill", "好久没更新". NOT for: creating new skills, editing skill content, debugging skill logic, or non-skill package management (brew, npm, pip).
 user-invocable: true
-argument-hint: "[status|scan|register|install|uninstall|pull]"
+argument-hint: "[list|status|scan|register|install|uninstall|pull]"
 ---
 
 # Skills Manager
@@ -47,6 +47,14 @@ python3 ~/.agents/skills-manager/scripts/main.py
 ## Available Commands
 
 When the user invokes this skill, run the appropriate subcommand based on `$ARGUMENTS` or the user's intent:
+
+### List installed skills
+
+Show all installed skills grouped by category (Dev/Research, Design/Frontend, Content/Media, Security/OSINT, SEO, Skill Management) with descriptions and tracking type. Use this when the user wants to browse or see what skills are installed.
+
+```bash
+python3 ~/.agents/skills-manager/scripts/main.py list
+```
 
 ### Status (default)
 
@@ -145,5 +153,6 @@ When skills are flagged as "private", warn the user about specific sensitive dat
 - Fresh setup / "scan skills" → run `scan`, present findings to user, then `register <name>` for selected skills
 - "register all" / quick setup → run `scan -y`
 - "delete/remove a skill" → run `uninstall <name>`
+- "list skills" / "what skills" / "show skills" → run `list`
 - `$ARGUMENTS` matches a subcommand → run it directly
 - `$ARGUMENTS` empty → run `status`
