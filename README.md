@@ -11,8 +11,15 @@ Skills stay where they are. We only record their paths and track upstream source
 ```
 ~/.agents/skills-manager/
 ├── manifest.json          # Registry: skills with paths, repos, targets
-├── update-skills.sh       # CLI script for all operations
 ├── SKILL.md               # Claude Code skill definition
+├── scripts/               # Python CLI
+│   ├── main.py            # Entry point
+│   ├── manifest.py        # Manifest read/write/query
+│   ├── git_ops.py         # Git subprocess wrappers
+│   ├── sync.py            # File synchronization
+│   ├── scanner.py         # Skill discovery & classification
+│   ├── output.py          # ANSI color output
+│   └── commands/          # One file per subcommand
 └── repos/                 # Sparse git clones of upstream repos (reference only)
     ├── anthropics-skills/  # Only checked-out subdirs for registered skills
     ├── vercel-labs-skills/
@@ -40,108 +47,108 @@ Skills stay where they are. We only record their paths and track upstream source
 # 1. Clone this repo
 git clone git@github.com:heshaofu2/skills-manager.git ~/.agents/skills-manager
 
-# 2. Make the script executable
-chmod +x ~/.agents/skills-manager/update-skills.sh
-
-# 3. Link skills-manager as a Claude Code skill
+# 2. Link skills-manager as a Claude Code skill
 ln -sfn ~/.agents/skills-manager ~/.claude/skills/skills-manager
 
-# 4. Run init to scan and register existing skills
-~/.agents/skills-manager/update-skills.sh init
+# 3. Scan and register existing skills
+python3 ~/.agents/skills-manager/scripts/main.py scan -y
 ```
 
 ## Usage
+
+All commands use the Python CLI:
+
+```bash
+python3 ~/.agents/skills-manager/scripts/main.py <command> [args]
+```
 
 ### Initialize (first-time setup)
 
 Scans existing skills across all target directories, classifies them using heuristics (private, external repo, unknown), and registers them in the manifest with their actual paths. No files are moved.
 
 ```bash
-~/.agents/skills-manager/update-skills.sh init
+python3 ~/.agents/skills-manager/scripts/main.py scan -y
 ```
 
 ### List all skills
 
+Shows all installed skills grouped by category (Dev/Research, Design/Frontend, Content/Media, Security/OSINT, SEO, Skill Management) with descriptions extracted from each skill's `SKILL.md` and their tracking type.
+
 ```bash
-~/.agents/skills-manager/update-skills.sh list
+python3 ~/.agents/skills-manager/scripts/main.py list
+```
+
+Example output:
+
+```
+=== Installed Skills (36) ===
+
+  Dev / Research
+  ──────────────────────────────────────────────────────────────────────
+  autoresearch    (git-repo)   Set up and run an autonomous experiment loop…
+  graphify        (local)      any input → knowledge graph → HTML + JSON…
+
+  SEO — Specialized
+  ──────────────────────────────────────────────────────────────────────
+  seo-audit       (local)      Full website SEO audit with parallel subagent…
+  seo-backlinks   (local)      Backlink profile analysis: referring domains…
 ```
 
 ### Check for updates
 
-Fetches from upstream repos and uses subdir-level diff to detect real changes per skill. Also checks git-repo type skills.
-
 ```bash
-~/.agents/skills-manager/update-skills.sh check
+python3 ~/.agents/skills-manager/scripts/main.py status -r
 ```
 
 ### Pull updates
 
 ```bash
 # Pull all
-~/.agents/skills-manager/update-skills.sh pull
+python3 ~/.agents/skills-manager/scripts/main.py pull
 
 # Pull a specific repo or skill
-~/.agents/skills-manager/update-skills.sh pull <repo-or-skill-name>
+python3 ~/.agents/skills-manager/scripts/main.py pull <repo-or-skill-name>
 ```
 
-### Add a new skill from GitHub
-
-**Step 1** — Register the repo (skip if already registered):
+### Install a skill from GitHub
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-repo <local-name> <github-url> [branch]
-```
-
-**Step 2** — Install the skill (syncs content to target directory, records path):
-
-```bash
-~/.agents/skills-manager/update-skills.sh add-skill <skill-name> <repo-name> <subdir-in-repo>
+python3 ~/.agents/skills-manager/scripts/main.py install <github-url>
+python3 ~/.agents/skills-manager/scripts/main.py install <github-url> --name <custom-name>
 ```
 
 Example:
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-repo anthropics-skills https://github.com/anthropics/skills.git main
-~/.agents/skills-manager/update-skills.sh add-skill pdf anthropics-skills skills/pdf
+python3 ~/.agents/skills-manager/scripts/main.py install https://github.com/pbakaus/impeccable
 ```
 
-### Register a git-repo skill
-
-For skills that are themselves git repositories:
+### Register an existing skill
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-git <name> <path> [repo-url]
+python3 ~/.agents/skills-manager/scripts/main.py register <skill-name>
 ```
 
-### Register a local skill
-
-For private/infrastructure skills with no upstream:
+### Add a repo source
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-local <name> [note]
+python3 ~/.agents/skills-manager/scripts/main.py add-repo <local-name> <github-url> [branch]
 ```
 
-### Scan and recommend
+### Uninstall a skill
 
-Scan target directories for unmanaged skills and provide recommendations:
-
-```bash
-~/.agents/skills-manager/update-skills.sh scan
-```
-
-### Remove a skill
-
-Removes from manifest only. Files at the skill's path are NOT deleted.
+Removes files and manifest entry. Use `--keep-files` to only remove the registration.
 
 ```bash
-~/.agents/skills-manager/update-skills.sh remove <skill-name>
+python3 ~/.agents/skills-manager/scripts/main.py uninstall <skill-name>
+python3 ~/.agents/skills-manager/scripts/main.py uninstall <skill-name> --keep-files
 ```
 
 ### Manage target platforms
 
 ```bash
-~/.agents/skills-manager/update-skills.sh add-target <name> <path>
-~/.agents/skills-manager/update-skills.sh remove-target <name>
+python3 ~/.agents/skills-manager/scripts/main.py add-target <name> <path>
+python3 ~/.agents/skills-manager/scripts/main.py remove-target <name>
 ```
 
 ## Manifest Format
